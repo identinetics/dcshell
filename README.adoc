@@ -1,0 +1,8 @@
+= Docker Compose utility scripts
+
+== Functionality
+
+=== generate build numbers
+
+dcscripts includes the plumbing to increment the build number whenever source or dependencies change.
+See link:docs/Buildnumbers.adoc

@@ -1,0 +1,8 @@
+version: "2"
+services:
+  shibsp1:
+    image: local/shibsp
+    container_name: shibsp
+  shibsp2:
+    image: local/shibsp
+    container_name: shibsp

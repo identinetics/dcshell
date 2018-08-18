@@ -1,0 +1,48 @@
+version: "2"
+services:
+  shibsp:
+    image: local/shibsp
+    container_name: shibsp
+    hostname: shibsp
+    labels:
+      x.service: sp.example.org
+    restart: unless-stopped
+    environment:
+        - SHIBDUSER=shibd
+        - HTTPDUSER=httpd
+        - LOGPURGEFILES
+    ports:
+      - "80:8080"    
+    #networks:
+    #  dockernet:
+    #    ipv4_address: 10.1.1.5 
+    volumes:
+        - shibsp.etc_httpd_conf:/etc/httpd/conf:Z
+        - shibsp.etc_httpd_conf.d:/etc/httpd/conf.d
+        - shibsp.etc_shibboleth:/etc/shibboleth:Z
+        #- shibsp.etc_shibboleth-ds:/etc/shibboleth-ds:Z
+        - shibsp.opt_etc:/opt/etc:Z
+        - shibsp.run_httpd:/run/httpd:Z
+        - shibsp.var_log:/var/log:Z
+        - shibsp.var_www:/var/www:Z
+    cap_drop:
+      - ALL
+    cap_add:
+      - dac_override
+      - setuid
+      - setgid
+      - chown
+      - net_raw
+#networks:
+#  dockernet:
+#    external: true
+volumes:
+    shibsp.etc_httpd_conf:
+    shibsp.etc_httpd_conf.d:
+    shibsp.etc_shibboleth:
+    #shibsp.etc_shibboleth-ds:
+    shibsp.opt_etc:
+    shibsp.run_httpd:
+    shibsp.var_log:
+    shibsp.var_www:
+

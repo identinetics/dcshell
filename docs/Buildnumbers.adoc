@@ -1,0 +1,107 @@
+# Docker Build Number Generation
+
+## Quickstart
+
+Running build.sh will automatically set buildnumbers in ./manifest and docker image tags.
+Before you build you need to prepare:
+
+1. Edit conf.sh and set MANIFEST_SCOPE to 'global' or 'local'.
+   'global' is for develpoment environments with write access to the repo, 'local' for the target environments.
+2. Copy /template/manifest2.sh to install/opt/bin in your Docker environment,
+   and edit it include all files that should increase the build number when changed.
+3. Add following lines to Dockerfile:
+
+    RUN mkdir -p $HOME/.config/pip \
+     && printf "[global]\ndisable-pip-version-check = True\n" > $HOME/.config/pip/pip.conf
+    COPY install/opt/bin/manifest2.sh /opt/bin/manifest2.sh
+4. Make sure that python3 is in the path of the default user in the docker image
+5. If you need to push the image after the build, do this with the -P option of build.sh, e.g. in a Jenkinspipeline
+
+## Use Case
+
+To deliver a docker image the project is contained in a git repository with the dscripts submodule and with optional submodules.
+
+Images for the target environment are being built in a target (qa or production) environment,
+which is only informed by the git repository and its build scripts (dscripts/build.sh, Jenkinsfile, .travis, ..).
+
+Docker images shall be tagged with build numbers.
+The build number is dependent on both source repositories and dependent artifacts.
+The build number shall be incremented if and only if both or either one change.
+
+## Design
+
+To support this process the dscripts submodule includes an option to automatically generate build numbers across a 2-stage environment.
+Build numbers have the format S.T, where S is the build number in the source (development) environment,
+ and T is the subordinate build number in the target environment,
+ reflecting changed dependencies (and possibly local patches).
+
+Therefore, running a build in the target environment will increment the second part T when dependencies have changed,
+ even when the source repos are identical. For example:
+
+* The source repo is pushed to github with the build number 123.0
+* The subsequent build in the target environment will produce build with the same number (123.0).
+  (This is assuming that the dependencies are identical, otherwise the T-part in the number would be incremented.)
+* 6 weeks later the regular update build in the target environment will hit a changed dependent package.
+  Therefore the build number will increment to 123.1. The new manifest will be stored locally.
+* 2 months later the regular update build in the target environment will hit a changed upstream docker image.
+  Therefore the build number will increase to 123.2.
+  Of course, the local manifest history must not be deleted.
+* The most recent build is always tagged as :latest to reference to the same image in Dockerfile and manifest.
+
+## Implementation
+
+The general flow is:
+
+* Docker build generates an initial build manifest in the dev environment.
+ This manifest comprises 2 parts:
+  ** Docker environment artifacts, such as source repositories and upstream image id
+  ** Image dependencies, collected by /opt/bin/manifest.sh executed after docker build
+* The first manifest is stored as manifest.global/1.0
+* Further builds increase the build number if the manifest is different from the most recent version:
+ ** In the source environment (i.e., an environment with write access to the repo) each new manifest will be added to the manifest/global directory with the new build number (2.0, 3.0, ..)
+ ** In the target environment each new manifest will be added to the manifest/local directory with the new subordinate build number (2.1, 3.1, 3.2, ..)
+ ** Each image will be tagged with 'B' + build number.
+
+### Manifest contents
+
+The manifest is a list of key value pairs separated by '=='.
+The key is the component identifier structured as group and component path or name.
+The value is either a hash shortened to 12 characters or a package version number.
+For better legibility hashes are prepended with a '#'.
+
+The component identifier is a human readable string grouping and addressing components for the build process.
+It has the form group-id::path.
+
+Following group-ids havbe been defined so far:
+FILE::<path>
+FROM::<base image>
+PYTHON[.venv]::[package]
+REPO::git-repo-path
+
+The repo path will likely be different in source and target environments,
+like git@github.com:owner/project and https://github.com/owner/project.
+Therefore only the owner/project must be used in the manifest key.
+An optional branch can be added, such as in owner/project/qa.
+
+
+Example manifest:
+
+FROM::centos:centos7==#ff426288ea90
+FILE::/etc/pki/tls/certpem==#168b6dce45ed
+FILE::/opt/app/lib/xyz.jar==#57f5227ea8ae
+PYTHON::six==1.11.0
+PYTHON::urllib3==1.22
+REPO::identinetics/dscripts==#cb85cc37c
+REPO::owner/project==#cf0080d07
+
+
+### Manifest generation
+
+The manifest is generated from both the docker build environment
+ and by instantiaing a container from the generated image and inspecting the component versions.
+
+dscripts/build.sh will automatically generate manifest files und less invoked with -M.
+To generate a manifest the project need to contain script "manifest.sh" in the project root.
+
+The entry "MANIFEST_SCOPE" controls whether manifests are written to manifest/global/ or manifest/local/.
+

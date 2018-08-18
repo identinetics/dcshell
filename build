@@ -1,0 +1,213 @@
+#!/usr/bin/env bash
+
+main() {
+    _get_commandline_opts $@
+    _load_yaml_config
+    _init_sudo
+    image_name_tagged="${IMAGENAME}${image_tag}"
+    _remove_previous_image
+    _prepare_build_command
+    _remove_buildnumber_tags
+    _exec_build_command
+    if [[ "$manifest" ]]; then
+        if [[ "$MANIFEST_SCOPE" ]]; then
+            _generate_manifest_and_image_build_number
+            _tag_with_build_number
+        else
+            echo "MANIFEST_SCOPE not set - no build number generated."
+        fi
+    fi
+    _push_image
+    echo "build.sh completed ($?)"
+}
+
+
+_get_commandline_opts() {
+    manifest='True'
+    unset image_tag
+    push_latest='True'
+    while getopts ":chf:klmMn:prt:" opt; do
+      case $opt in
+        c) CACHEOPT="--no-cache";;
+        f) dc_config=$OPTARG
+        k) keep_opt='True';;
+        l) unset push_latest;;
+        m) manifest='True';;
+        M) unset manifest;;
+        n) config_nr=$OPTARG
+           re='^[0-9][0-9]$'
+           if ! [[ $OPTARG =~ $re ]] ; then
+              echo "error: -n argument is not a number in the range frmom 02 .. 99" >&2; exit 1
+           fi
+           config_opt="-n ${config_nr}";;
+        p) push='True';;
+        r) remove_img='True';;
+        t) image_tag=":${OPTARG}";;
+        :) echo "Option -$OPTARG requires an argument"; exit 1;;
+        *) echo "usage: $0 [-b] [-c] [-f file] [-h] [-k] [-l] [-m] [-M] [-p] [-r] [-t tag] [cmd]
+             -c  do not use cache (build --no-cache)
+             -f  compose file
+             -k  keep previous build tags (default: remove all 'B*' tags)
+             -l  do not push image:latest (only :<buildno> or tag from -t)
+             -m  generate manifest for build number generation (default)
+             -M  do not generate manifest for build number generation
+             -p  push after build (pushing :latest depends on -l)
+             -r  remove existing image (all tags: docker rmi -f imageid)
+             -t  add this tag to the build target name
+
+           The build-number and -t custom tagging require that there is not tag on the image element in the compose file.
+           "; exit 0;;
+      esac
+    done
+    shift $((OPTIND-1))
+}
+
+
+_load_yaml_config() {
+    SCRIPTDIR=$(cd $(dirname $BASH_SOURCE[0]) && pwd)
+    PROJ_HOME=$(cd $(dirname $SCRIPTDIR) && pwd)
+    config_script=$(echo $dc_config | sed -E 's/\.ya?ml$/.sh/')
+    $SCRIPTDIR/config.sh -k 'container_name' -k 'image' -k 'build.dockerfile' $dc_config $PROJ_HOME/$config_script
+    source $PROJ_HOME/$config_script
+}
+
+
+_init_sudo() {
+    if (( $(id -u) != 0 )); then
+        sudo='sudo -n' # ONLY used for `docker ..` commands
+    fi
+}
+
+
+_remove_previous_image() {
+    if [[ "$remove_img" ]]; then
+        image_id=$(${sudo} docker images ls --filter "reference=${image_name_tagged}" -q)
+        cmd="${sudo} docker rmi -f ${image_id}"
+        [[ "$print" ]] && echo $cmd
+        $cmd 2> /dev/null || true
+    fi
+}
+
+
+_remove_all_buildnumber_tags() {
+    tmpfile=$(mktemp /tmp/build_sh.tmp)
+    $sudo docker image ls --filter reference=${IMAGENAME} --format "{{.Tag}} {{.Repository}}" |\
+        perl -ne 'if (/^(B\d+\.\d+)\s+(.+)$/) {print "\$sudo docker rmi $2:$1\n"}' > $tmpfile
+    [[ "$print" ]] && cat $tmpfile
+    bash $tmpfile
+    rm $tmpfile
+}
+
+
+_exec_build_command() {
+    ${sudo} docker_compose build
+    rc=$?
+    if (( $rc == 0 )); then
+        echo "image: ${image_name_tagged} built."
+    else
+        echo -e '\E[33;31m'"\033[1mError\033[0m Docker build failed"
+        exit $rc
+    fi
+}
+
+
+_remove_buildnumber_tags() {
+    eval $(echo "$sudo docker rmi 2>/dev/null"; \
+           $sudo docker image ls --filter "reference=$IMAGENAME" --format "{{.Tag}} {{.Repository}}" \
+                | perl -ne 'if (/(^B\d+\.\d+)\s+(\S+)$/) { print "$2:$1 " }')
+}
+
+
+_check_python3() {
+    python3 -c exit >/dev/null 2>&1
+    if (( $? > 0 )); then
+        echo "python3 not found in path. Cannot generate manifest."
+        exit 5
+    fi
+}
+
+
+_generate_manifest_and_image_build_number() {
+    if [[ ! "$MANIFEST_SCOPE" ]]; then
+        echo "MANIFEST_SCOPE not set - no build number generated."
+        return
+    fi
+    _check_python3
+    get_container_status
+    is_running=$?
+    if (( $is_running == 0 )); then
+        echo "Container already running. Cannot generate manifest, image not tagged"
+        exit 2
+    elif [[ ! -e "$buildscriptsdir/manifest.sh"  ]]; then
+        echo "cannot run '$buildscriptsdir/manifest.sh'; image not tagged"
+        exit 3
+    fi
+    mkdir -p $proj_home/manifest
+    manifest_temp="$proj_home/manifest/manifest.tmp"
+    $buildscriptsdir/manifest.sh > $manifest_temp
+    $buildscriptsdir/run.sh -i /opt/bin/manifest2.sh | sed -e 's/\r$//' >> $manifest_temp
+    build_number_file=$(mktemp)
+    python3 $buildscriptsdir/buildnbr.py generate $manifest_temp $MANIFEST_SCOPE $build_number_file
+    build_number=$(cat $build_number_file)
+    rm $build_number_file
+}
+
+
+_tag_with_build_number() {
+    newname="${IMAGENAME}:B${build_number}"
+    _tag_image
+}
+
+
+_tag_image() {
+    cmd="${sudo} docker tag ${IMAGENAME} ${newname}"
+    [[ "$print" ]] && echo $cmd
+    $cmd
+    if (( $? == 0 )); then
+        echo "Successfully tagged ${IMAGENAME}:B${build_number}"
+    else
+        echo "Failed to create tag ${IMAGENAME}:B${build_number}"
+        exit 4
+    fi
+}
+
+
+_untag_image() {
+    cmd="${sudo} docker rmi ${newname}"
+    [[ "$print" ]] && echo $cmd
+    $cmd
+    (( $? > 0 )) && echo 'untag failed' && exit 5
+}
+
+
+_push_image() {
+    # push image if $push is set, with following tagging rules: 
+    #   push with tag $image_tag or without tag (i.e. :latest) if $push_latest or $image_tag are set
+    #   push with build_number if $manifest is set
+    if [[ "$push" ]]; then
+        if [[ "$image_tag" || "$push_latest" ]]; then
+            newname="${DOCKER_REGISTRY_PREFIX}${image_name_tagged}"
+            _tag_image
+            cmd="${sudo} docker push ${newname}"
+            [[ "$print" ]] && echo $cmd
+            $cmd
+            (( $? > 0 )) && echo 'push failed' && exit 6
+            _untag_image
+        else
+            echo "skipping docker push of :latest"
+        fi
+        if [[ "$manifest" ]]; then
+            newname="${DOCKER_REGISTRY_PREFIX}${IMAGENAME}:B${build_number}"
+            _tag_image
+            cmd="${sudo} docker push ${newname}"
+            [[ "$print" ]] && echo $cmd
+            $cmd
+            (( $? > 0 )) && echo 'push failed' && exit 6
+            _untag_image
+        fi
+    fi
+}
+
+
+main $@
+
