@@ -1,8 +1,8 @@
-version: "3"
+version: "2"
 services:
   alpinista:
     build:
-        context: ./testenv
+        context: .
         args:
             - TIMEZONE=Europe/Vienna
     image: local/test_alpinista

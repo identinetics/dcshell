@@ -26,17 +26,13 @@ _get_commandline_opts() {
     unset image_tag
     push_latest='True'
     f_index=0
-    while getopts ":cDhf:klmMprt:v" opt; do
+    while getopts ":cD:hf:klmMprt:v" opt; do
       case $opt in
         c) CACHEOPT="--no-cache";;
-        D) projdir=$OPTARG
-        f) if [[ -f "$OPTARG" ]]; then
-               dc_config_opt="${dc_config_opt} -f ${OPTARG}"
-               (( $f_index==0 )) && dc_config_base=$OPTARG
-               f_index=$((f_index+1))
-           else
-               echo -f $OPTARG must be a file; exit 1
-           fi;;
+        D) projdir=$OPTARG; projdir_opt="-D $OPTARG";;
+        f) dc_config_list[$f_index]=$OPTARG;
+           dc_config_opt="${dc_config_opt} -f ${OPTARG}";
+           f_index=$((f_index+1));;
         k) keep_opt='True';;
         l) unset push_latest;;
         m) manifest='True';;
@@ -68,16 +64,32 @@ _get_commandline_opts() {
       esac
     done
     shift $((OPTIND-1))
+    if (( $f_index==0 )); then
+         echo "at least one -f argument is required"; exit 1
+    fi
+    dc_opt_prefixed=''
+    for f in ${dc_config_list[@]}; do
+        [[ "$projdir" ]] && f="${projdir}/${f}"
+        if [[ ! -f "$f" ]]; then
+            echo -f $f must be a file; exit 1
+        else
+            dc_opt_prefixed="$dc_opt_prefixed -f ${f}"
+        fi
+    done
+    dc_config_base=${dc_config_list[0]}
 
 }
 
-
 _load_yaml_config() {
-    SCRIPTDIR=$(cd $(dirname $BASH_SOURCE[0]) && pwd)
-    PROJ_HOME=$(cd $(dirname $SCRIPTDIR) && pwd)
-    config_script=$(echo ${dc_config_base} | sed -E 's/\.ya?ml$/.sh/')
-    $SCRIPTDIR/config2sh.py -k 'container_name' -k 'image' -k 'build.dockerfile' $dc_config_opt $PROJ_HOME/$config_script
-    source $PROJ_HOME/$config_script
+    tmpscript=$(mktemp /tmp/config2shXXXX.sh)
+    cmd="./config2sh.py $projdir_opt -k 'container_name' -k 'image' -k 'build.dockerfile' $dc_config_opt $tmpscript"
+    [[ "$verbose" ]] && echo $cmd
+    $cmd
+    if (( $? )); then
+        echo "config2sh.p failed"; exit 1
+    fi
+    source $tmpscript
+    #rm $tmpscript
 }
 
 
@@ -109,8 +121,8 @@ _remove_all_buildnumber_tags() {
 
 
 _exec_build_command() {
-    cmd="${sudo} docker-compose ${dc_config_opt} build"
-    [[ "$verbose" ]] && $cmd
+    cmd="${sudo} docker-compose ${dc_opt_prefixed} build"
+    [[ "$verbose" ]] && echo $cmd
     $cmd
     rc=$?
     if (( $rc == 0 )); then

@@ -82,14 +82,14 @@ def map_service_items(dc_config_dict, dc_service, service_items, filter_keys) ->
                 try:
                     r[key] = dc_config_dict['services'][dc_service][dictitem]
                 except KeyError:
-                    r['# missing key: '] = key
+                    r[key] = ''
         elif dictitem.count('.') == 1:
             if filter_keys is None or dictitem in filter_keys:
                 (k1, k2) = dictitem.split('.')
                 try:
                     r[key] = dc_config_dict['services'][dc_service][k1][k2]
                 except KeyError:
-                    r['# missing key'] = key
+                    r[key] = ''
     return r
 
 
