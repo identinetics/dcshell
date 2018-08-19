@@ -9,9 +9,11 @@ Pimp docker-compose
 dcscripts includes the plumbing to increment the build number whenever source or dependencies change.
 See link:docs/Buildnumbers.adoc
 
-== Usage
+== Install, Usage
 
+By default, the dcshell directory is an immediate subfolder of your project dir.
 Copy the project into the docker build context, such as:
 
     git submodule add <this project URL>
 
+You may override this with the -D/--projdir option.

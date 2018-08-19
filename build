@@ -25,11 +25,15 @@ _get_commandline_opts() {
     manifest='True'
     unset image_tag
     push_latest='True'
-    while getopts ":cdhf:klmMprt:" opt; do
+    f_index=0
+    while getopts ":cDhf:klmMprt:v" opt; do
       case $opt in
         c) CACHEOPT="--no-cache";;
+        D) projdir=$OPTARG
         f) if [[ -f "$OPTARG" ]]; then
-               dc_config="${dc_config} -f ${OPTARG}"
+               dc_config_opt="${dc_config_opt} -f ${OPTARG}"
+               (( $f_index==0 )) && dc_config_base=$OPTARG
+               f_index=$((f_index+1))
            else
                echo -f $OPTARG must be a file; exit 1
            fi;;
@@ -42,9 +46,10 @@ _get_commandline_opts() {
         t) image_tag=":${OPTARG}";;
         v) verbose='True';;
         :) echo "Option -$OPTARG requires an argument"; exit 1;;
-        *) echo "usage: $0 [-b] [-c] [-f file...] [-h] [-k] [-l] [-m] [-M] [-p] [-r] [-t tag] [cmd]
+        *) echo "usage: $0 [-b] [-c] [-D path][-f file...] [-h] [-k] [-l] [-m] [-M] [-p] [-r] [-t tag] [cmd]
              -c  do not use cache (build --no-cache)
-             -f  compose file
+             -D  specify project directory (file parameters will be relative to this path)
+             -f  compose file (later files update keys in former ones)
              -k  keep previous build tags (default: remove all 'B*' tags)
              -l  do not push image:latest (only :<buildno> or tag from -t)
              -m  generate manifest for build number generation (default)
@@ -70,8 +75,8 @@ _get_commandline_opts() {
 _load_yaml_config() {
     SCRIPTDIR=$(cd $(dirname $BASH_SOURCE[0]) && pwd)
     PROJ_HOME=$(cd $(dirname $SCRIPTDIR) && pwd)
-    config_script=$(echo ${dc_config} | sed -E 's/\.ya?ml$/.sh/')
-    $SCRIPTDIR/config2sh.py -k 'container_name' -k 'image' -k 'build.dockerfile' $dc_config $PROJ_HOME/$config_script
+    config_script=$(echo ${dc_config_base} | sed -E 's/\.ya?ml$/.sh/')
+    $SCRIPTDIR/config2sh.py -k 'container_name' -k 'image' -k 'build.dockerfile' $dc_config_opt $PROJ_HOME/$config_script
     source $PROJ_HOME/$config_script
 }
 
@@ -104,7 +109,7 @@ _remove_all_buildnumber_tags() {
 
 
 _exec_build_command() {
-    cmd="${sudo} docker_compose ${dc_config} build"
+    cmd="${sudo} docker-compose ${dc_config_opt} build"
     [[ "$verbose" ]] && $cmd
     $cmd
     rc=$?

@@ -18,9 +18,9 @@ def main(*cli_args):
     try:
         service_items = define_service_items()
         args = get_args(service_items, cli_args)
-        (dc_config_dict, dc_service) = load_config_list(args.config_yaml)
+        (dc_config_dict, dc_service) = load_config_list(args.config_yaml_fd)
         key_value_list = map_service_items(dc_config_dict, dc_service, service_items, args.key)
-        create_shell_script(key_value_list, args.shell_script)
+        create_shell_script(key_value_list, args.shell_script_fd)
     except CommandExecutionError as e:
         print(os.path.basename(__file__), 'failed.', str(e))
         sys.exit(1)
@@ -41,9 +41,11 @@ def get_args(service_items, testargs=None) -> argparse.Namespace:
                     'settings from a restricted list as shell variables. '
                     'Only 1 service per file is allowed',
     )
-    parser.add_argument('shell_script', type=argparse.FileType('w', encoding='utf8'),
-                        help='resulting shell script that can be sourced to export config values to the shell')
-    parser.add_argument('-f', '--config_yaml', action='append', type=argparse.FileType('r', encoding='utf8'),
+    parser.add_argument('shell_script', help='resulting shell script that can be sourced to '
+                                             'export config values to the shell')
+    parser.add_argument('-D', '--projdir',
+                        help='-D  specify project directory (file parameters will be relative to this path)')
+    parser.add_argument('-f', '--config_yaml', action='append',
                         help='docker-compose config file (YAML)')
     service_items_str = ' '.join(list(service_items.values()))
     parser.add_argument('-k', '--key', action='append',
@@ -53,8 +55,22 @@ def get_args(service_items, testargs=None) -> argparse.Namespace:
         args = parser.parse_args(testargs)
     else:
         args = parser.parse_args() # regular case: use sys.argv
+    # open files for -f args
     if args.config_yaml is None:
         raise CommandExecutionError('one or more -f options required')
+    args.config_yaml_fd = []
+    for fpath_rel in args.config_yaml:
+        fpath = fpath_rel if args.projdir is None else '{}/{}'.format(args.projdir, fpath_rel) # os.path.join broken
+        try:
+            args.config_yaml_fd.append(open(fpath, encoding='utf-8'))
+        except Exception as e:
+            raise CommandExecutionError('Cannot open -f', fpath)
+    # open file for shell script arg
+    try:
+        fpath = args.shell_script if args.projdir is None else os.path.join(args.projdir, args.shell_script)
+        args.shell_script_fd = open(fpath, 'w', encoding='utf-8')
+    except Exception as e:
+        raise CommandExecutionError('Cannot create', fpath)
     return args
 
 
@@ -83,7 +99,8 @@ def load_config_list(config_yaml_list) -> list:
         dict_merge(dc_config_dict, load_config(config_yaml))
     if 'version' not in dc_config_dict:
         raise CommandExecutionError('Docker-compose config version>=2 must contain "version:"')
-    if not isinstance(dc_config_dict['services'], dict) or (len(list(dc_config_dict['services'])) != 1):
+    if not isinstance(dc_config_dict['services'], dict) \
+       or (len(list(dc_config_dict['services'])) != 1):
         raise CommandExecutionError('Docker-compose config: services must be a dict with exactly one service')
     dc_service = list(dc_config_dict['services'])[0]
     return (dc_config_dict, dc_service)
@@ -171,6 +188,11 @@ def test_06_cli_singlekey():
 def test_07_cli_twokeys():
     main('-k', 'container_name', '-k', 'image', '-f', 'test/testin/config2sh/t07_dc.yaml', 'test/testout/t07_script.sh')
     assert(filecmp.cmp('test/testin/config2sh/t07_script.sh', 'test/testout/t07_script.sh'))
+
+
+def test_08_path_relative_to_prjdir():
+    main('-k', 'container_name', '-D', 'test', '-f', '/testin/config2sh/t08_dc.yaml', 'testout/t08_script.sh')
+    assert(filecmp.cmp('test/testin/config2sh/t08_script.sh', 'test/testout/t08_script.sh'))
 
 
 if __name__ == "__main__":
