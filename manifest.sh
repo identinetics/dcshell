@@ -13,16 +13,20 @@ main() {
 
 _get_commandline_opts() {
     dc_config=docker-compose.y*ml
+    f_opt_count=0
     while getopts ":f:" opt; do
       case $opt in
-        f) dc_config=$OPTARG
+        f) dc_config=$OPTARG; f_opt_count=$((f_opt_count+1));;
         :) echo "Option -$OPTARG requires an argument"; exit 1;;
-        *) echo "usage: $0 [-b] [-c] [-h] [-k] [-l] [-m] [-M] [-n <NN>] [-p] [-P] [-r] [-t tag] [-u] [cmd]
+        *) echo "usage: $0 [-h] [-f file]
              -f  docker-compose config file
            "; exit 0;;
       esac
     done
     shift $((OPTIND-1))
+    if (( f_opt_count > 1)); then
+        echo "$0 does not support multiple compose files" && exit 1
+    fi
 }
 
 
