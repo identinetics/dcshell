@@ -20,12 +20,13 @@ def main(*cli_args):
         args = get_args(service_items, cli_args)
         (dc_config_dict, dc_service) = load_config_list(args.config_yaml_fd)
         key_value_list = map_service_items(dc_config_dict, dc_service, service_items, args.key)
-        create_shell_script(key_value_list, args.shell_script_fd)
+        create_shell_script(key_value_list, dc_service, args.shell_script_fd)
     except CommandExecutionError as e:
         print(os.path.basename(__file__), 'failed.', str(e))
         sys.exit(1)
 
 def define_service_items():
+    # TODO: export DC_DOCKERFILE as path relative to DC_PROJ_HOME (if Dockerfile not in DC_PROJ_HOME
     return {
         'CONTAINERNAME': 'container_name',
         'CONTEXT': 'build.context',
@@ -117,7 +118,8 @@ def load_config(config_yaml) -> dict:
     return dc_config_dict
 
 
-def create_shell_script(key_value_dict, shell_script):
+def create_shell_script(key_value_dict, dc_service, shell_script):
+    shell_script.write("export DC_SERVICE='{}'\n".format(dc_service))
     for key, value in key_value_dict.items():
         if isinstance(value, dict):
             for k, v in value.items():

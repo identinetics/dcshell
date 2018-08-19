@@ -4,6 +4,7 @@ main() {
     _get_commandline_opts $@
     _init_sudo
     _load_yaml_config
+    _set_projhome
     image_name_tagged="${IMAGENAME}${image_tag}"  # add tag from -t
     _remove_previous_image  # i.e. image:lastest or custom tag specified with -t
     _remove_all_buildnumber_tags # filters all tags with the Bn.m pattern
@@ -55,15 +56,16 @@ _get_commandline_opts() {
              -t  add this custom tag to the build target name
              -v  verbose
 
-           The build-number and -t custom tagging require that there is not tag on the image element in the compose file.
+           The -m and -t tagging require that there is not tag on the image element in the compose file.
 
            To explicitly specify a registry set DOCKER_REGISTRY_PREFIX, which must include a trailing slash.
 
-           To generate build numbers $MANIFEST_SCOPE must be set to 'local' or 'global'
+           To generate build numbers MANIFEST_SCOPE must be set to 'local' or 'global'
            "; exit 0;;
       esac
     done
     shift $((OPTIND-1))
+    # post-process -f argument(s)
     if (( $f_index==0 )); then
          echo "at least one -f argument is required"; exit 1
     fi
@@ -77,18 +79,19 @@ _get_commandline_opts() {
         fi
     done
     dc_config_base=${dc_config_list[0]}
-
 }
 
 _load_yaml_config() {
     tmpscript=$(mktemp /tmp/config2shXXXX.sh)
-    cmd="./config2sh.py $projdir_opt -k 'container_name' -k 'image' -k 'build.dockerfile' $dc_config_opt $tmpscript"
+    tmpscript=/tmp/config2sh.sh
+    cmd="./config2sh.py $projdir_opt -k container_name -k image -k build.dockerfile $dc_config_opt $tmpscript"
     [[ "$verbose" ]] && echo $cmd
     $cmd
     if (( $? )); then
-        echo "config2sh.p failed"; exit 1
+        echo "config2sh.py failed"; exit 1
     fi
     source $tmpscript
+    [[ "$verbose" ]] && cat $tmpscript
     #rm $tmpscript
 }
 
@@ -110,6 +113,16 @@ _remove_previous_image() {
 }
 
 
+_set_projhome() {
+    if [[ "$projdir" ]]; then
+        DC_PROJHOME=$projdir
+    else
+        buildscriptsdir=$(cd $(dirname $BASH_SOURCE[0]) && pwd)
+        DC_PROJHOME=$(cd $(dirname $buildscriptsdir) && pwd)
+    fi
+}
+
+
 _remove_all_buildnumber_tags() {
     tmpfile=$(mktemp /tmp/build_shXXXX.tmp)
     $sudo docker image ls --filter reference=${IMAGENAME} --format "{{.Tag}} {{.Repository}}" |\
@@ -120,11 +133,16 @@ _remove_all_buildnumber_tags() {
 }
 
 
-_exec_build_command() {
-    cmd="${sudo} docker-compose ${dc_opt_prefixed} build"
+_exec_command() {
+    cmd="${sudo} docker-compose ${dc_opt_prefixed} $@"
     [[ "$verbose" ]] && echo $cmd
     $cmd
     rc=$?
+}
+
+
+_exec_build_command() {
+    _exec_command build
     if (( $rc == 0 )); then
         echo "image: ${image_name_tagged} built."
     else
@@ -154,16 +172,16 @@ _generate_manifest_and_image_build_number() {
     if (( $is_running == 0 )); then
         echo "Container already running. Cannot generate manifest, image not tagged"
         exit 2
-    elif [[ ! -e "$buildscriptsdir/manifest.sh"  ]]; then
-        echo "cannot run '$buildscriptsdir/manifest.sh'; image not tagged"
+    elif [[ ! -e "./manifest.sh"  ]]; then
+        echo "cannot run './manifest.sh'; image not tagged"
         exit 3
     fi
-    mkdir -p $proj_home/manifest
-    manifest_temp="$proj_home/manifest/manifest.tmp"
-    $buildscriptsdir/manifest.sh > $manifest_temp
-    $buildscriptsdir/run.sh -i /opt/bin/manifest2.sh | sed -e 's/\r$//' >> $manifest_temp
+    mkdir -p $DC_PROJHOME/manifest
+    manifest_temp="$DC_PROJHOME/manifest/manifest.tmp"
+    bash -x ./manifest.sh ${dc_opt_prefixed} > $manifest_temp
+    _exec_command run --rm ${DC_SERVICE} /opt/bin/manifest2.sh | sed -e 's/\r$//' >> $manifest_temp
     build_number_file=$(mktemp)
-    python3 $buildscriptsdir/buildnbr.py generate $manifest_temp $MANIFEST_SCOPE $build_number_file
+    python3 ./buildnbr.py generate $manifest_temp $MANIFEST_SCOPE $build_number_file
     build_number=$(cat $build_number_file)
     rm $build_number_file
 }

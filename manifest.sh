@@ -1,25 +1,25 @@
 #!/bin/bash
 
-# This script must reside in the root of the docker project (same place as conf.sh)
-
 main() {
+    # to be called from build, i.e. config already loaded
     _get_commandline_opts $@
-    _load_yaml_config
     _init_sudo
-    _inspect_docker_build_env
-    _inspect_container
+    _inspect_changes_in_docker_build_env
+    _inspect_changes_in_container
 }
 
 
 _get_commandline_opts() {
     dc_config=docker-compose.y*ml
     f_opt_count=0
-    while getopts ":f:" opt; do
+    while getopts ":f:v" opt; do
       case $opt in
-        f) dc_config=$OPTARG; f_opt_count=$((f_opt_count+1));;
+        f) dc_config_opt="${dc_config_opt} -f ${OPTARG}";;
+        v) verbose='True';;
         :) echo "Option -$OPTARG requires an argument"; exit 1;;
-        *) echo "usage: $0 [-h] [-f file]
+        *) echo "usage: $0 [-h] [-f file] [-v]
              -f  docker-compose config file
+             -v  verbose
            "; exit 0;;
       esac
     done
@@ -27,15 +27,6 @@ _get_commandline_opts() {
     if (( f_opt_count > 1)); then
         echo "$0 does not support multiple compose files" && exit 1
     fi
-}
-
-
-_load_yaml_config() {
-    SCRIPTDIR=$(cd $(dirname $BASH_SOURCE[0]) && pwd)
-    PROJ_HOME=$(cd $(dirname $SCRIPTDIR) && pwd)
-    config_script=$(echo $dc_config | sed -E 's/\.ya?ml$/.sh/')
-    $SCRIPTDIR/config.sh -k 'CONTAINERNAME' -k 'IMAGENAME' $dc_config $PROJ_HOME/$config_script
-    source $PROJ_HOME/$config_script
 }
 
 
@@ -67,7 +58,7 @@ _inspect_git_repos() {
 
 
 _inspect_from_image() {
-    dockerfile_path="${DOCKERFILE_DIR}${DSCRIPTS_DOCKERFILE:-Dockerfile}"
+    dockerfile_path="${DC_PROJHOME}${DC_DOCKERFILE:-Dockerfile}"
     from_image_spec=$(egrep "^FROM" ${dockerfile_path} | awk '{ print $2}')
     if [[ "$from_image_spec" == *:* ]]; then
         image_id=$(${sudo} docker image ls --filter "reference=${from_image_spec}" -q | head -1)
@@ -78,15 +69,18 @@ _inspect_from_image() {
 }
 
 
-_inspect_docker_build_env() {
+_inspect_changes_in_docker_build_env() {
     _inspect_git_repos
     _inspect_from_image
 }
 
 
-_inspect_container() {
-    cmd="$sudo docker run -i --rm -u 0 --name=${CONTAINERNAME}_manifest ${IMAGENAME} /opt/bin/manifest2.sh"
+_inspect_changes_in_container() {
+    cmd="${sudo} docker-compose ${dc_config_opt} run --rm ${DC_SERVICE} /opt/bin/manifest2.sh"
+    [[ "$verbose" ]] && echo $cmd
+    $cmd
+    rc=$?
 }
 
 
-main
+main $@

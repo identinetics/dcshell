@@ -1,5 +1,7 @@
+export DC_SERVICE='shibsp'
 export CONTAINERNAME='shibsp'
-export # missing key='DOCKERFILE'
+export CONTEXT=''
+export DOCKERFILE=''
 export ENVIRONMENT_SHIBDUSER=shibd
 export ENVIRONMENT_HTTPDUSER=httpd
 export ENVIRONMENT_LOGPURGEFILES=
