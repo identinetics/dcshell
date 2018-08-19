@@ -92,9 +92,8 @@ _set_home_dirs() {
 
 
 _load_yaml_config() {
-    tmpscript=$(mktemp /tmp/config2shXXXX.sh)
-    tmpscript=/tmp/config2sh.sh
-    cmd="$DC_PROJHOME/config2sh.py $projdir_opt -k container_name -k image -k build.dockerfile $dc_config_opt $tmpscript"
+    tmpscript=$(mktemp /var/tmp/config2shXXXX.sh)
+    cmd="$DCSHELL_HOME/config2sh.py $projdir_opt -k container_name -k image -k build.dockerfile $dc_config_opt $tmpscript"
     [[ "$verbose" ]] && echo $cmd
     $cmd
     if (( $? )); then
@@ -172,16 +171,16 @@ _generate_manifest_and_image_build_number() {
     if (( $is_running == 0 )); then
         echo "Container already running. Cannot generate manifest, image not tagged"
         exit 2
-    elif [[ ! -e "./manifest.sh"  ]]; then
-        echo "cannot run './manifest.sh'; image not tagged"
+    elif [[ ! -e "$DCSHELL_HOME/manifest.sh"  ]]; then
+        echo "cannot run $DCSHELL_HOME/manifest.sh; image not tagged"
         exit 3
     fi
     mkdir -p $DC_PROJHOME/manifest
     manifest_temp="$DC_PROJHOME/manifest/manifest.tmp"
-    bash -x ./manifest.sh ${dc_opt_prefixed} > $manifest_temp
+    $DCSHELL_HOME/manifest.sh ${dc_opt_prefixed} > $manifest_temp
     _exec_command run --rm ${DC_SERVICE} /opt/bin/manifest2.sh | sed -e 's/\r$//' >> $manifest_temp
     build_number_file=$(mktemp)
-    python3 ./buildnbr.py generate $manifest_temp $MANIFEST_SCOPE $build_number_file
+    python3 $DCSHELL_HOME/buildnbr.py generate $manifest_temp $MANIFEST_SCOPE $build_number_file
     build_number=$(cat $build_number_file)
     rm $build_number_file
 }
