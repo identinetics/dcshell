@@ -28,7 +28,11 @@ _get_commandline_opts() {
     while getopts ":cdhf:klmMprt:" opt; do
       case $opt in
         c) CACHEOPT="--no-cache";;
-        f) dc_config="${dc_config} -f ${OPTARG}";;
+        f) if [[ -f "$OPTARG" ]]; then
+               dc_config="${dc_config} -f ${OPTARG}"
+           else
+               echo -f $OPTARG must be a file; exit 1
+           fi;;
         k) keep_opt='True';;
         l) unset push_latest;;
         m) manifest='True';;
@@ -59,14 +63,15 @@ _get_commandline_opts() {
       esac
     done
     shift $((OPTIND-1))
+
 }
 
 
 _load_yaml_config() {
     SCRIPTDIR=$(cd $(dirname $BASH_SOURCE[0]) && pwd)
     PROJ_HOME=$(cd $(dirname $SCRIPTDIR) && pwd)
-    config_script=$(echo $dc_config | sed -E 's/\.ya?ml$/.sh/')
-    $SCRIPTDIR/config.sh -k 'container_name' -k 'image' -k 'build.dockerfile' $dc_config $PROJ_HOME/$config_script
+    config_script=$(echo ${dc_config} | sed -E 's/\.ya?ml$/.sh/')
+    $SCRIPTDIR/config2sh.py -k 'container_name' -k 'image' -k 'build.dockerfile' $dc_config $PROJ_HOME/$config_script
     source $PROJ_HOME/$config_script
 }
 
@@ -89,7 +94,7 @@ _remove_previous_image() {
 
 
 _remove_all_buildnumber_tags() {
-    tmpfile=$(mktemp /tmp/build_sh.tmp)
+    tmpfile=$(mktemp /tmp/build_shXXXX.tmp)
     $sudo docker image ls --filter reference=${IMAGENAME} --format "{{.Tag}} {{.Repository}}" |\
         perl -ne 'if (/^(B\d+\.\d+)\s+(.+)$/) {print "\$sudo docker rmi $2:$1\n"}' > $tmpfile
     [[ "$verbose" ]] && cat $tmpfile

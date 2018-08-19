@@ -1,4 +1,6 @@
-= Docker Compose utility scripts
+= Docker Compose Shell
+
+Pimp docker-compose
 
 == Functionality
 
@@ -6,3 +8,10 @@
 
 dcscripts includes the plumbing to increment the build number whenever source or dependencies change.
 See link:docs/Buildnumbers.adoc
+
+== Usage
+
+Copy the project into the docker build context, such as:
+
+    git submodule add <this project URL>
+

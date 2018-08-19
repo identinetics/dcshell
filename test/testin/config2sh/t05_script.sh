@@ -1,4 +1,5 @@
 export CONTAINERNAME='shibsp'
+export # missing key='DOCKERFILE'
 export ENVIRONMENT_SHIBDUSER=shibd
 export ENVIRONMENT_HTTPDUSER=httpd
 export ENVIRONMENT_LOGPURGEFILES=

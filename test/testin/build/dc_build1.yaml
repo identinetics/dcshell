@@ -1,6 +1,10 @@
 version: "3"
 services:
   alpinista:
+    build:
+        context: ./testenv
+        args:
+            - TIMEZONE=Europe/Vienna
     image: local/test_alpinista
     container_name: test_alpinista
     hostname: test_alpinista

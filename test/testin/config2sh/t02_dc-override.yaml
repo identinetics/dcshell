@@ -1,0 +1,3 @@
+services:
+  shibsp:
+    image: r2h2/shibsp:pr
