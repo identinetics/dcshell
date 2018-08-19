@@ -1,0 +1,6 @@
+version: "3"
+services:
+  alpinista:
+    image: local/test_alpinista
+    container_name: test_alpinista
+    hostname: test_alpinista
