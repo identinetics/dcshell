@@ -18,7 +18,6 @@ main() {
         fi
     fi
     _push_image
-    [[ "$verbose" ]] && echo 'done.'
 }
 
 
@@ -82,12 +81,12 @@ _get_commandline_opts() {
 }
 
 _set_home_dirs() {
+    export DCSHELL_HOME=$(cd $(dirname $BASH_SOURCE[0]) && pwd)
     if [[ "$projdir" ]]; then
         export DC_PROJHOME=$projdir
     else
         export DC_PROJHOME=$(cd $(dirname $DCSHELL_HOME) && pwd)
     fi
-    export DCSHELL_HOME=$(cd $(dirname $BASH_SOURCE[0]) && pwd)
 }
 
 
@@ -220,7 +219,7 @@ _untag_image() {
 
 
 _push_image() {
-    # push image if $push is set, with following tagging rules: 
+    # push image if $push is set, with following tagging rules:
     #   push with tag $image_tag or without tag (i.e. :latest) if $push_latest or $image_tag are set
     #   push with build_number if $manifest is set
     if [[ "$push" ]]; then
@@ -249,4 +248,3 @@ _push_image() {
 
 
 main $@
-

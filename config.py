@@ -135,17 +135,17 @@ def load_config(config_yaml) -> dict:
 
 
 def create_shell_script(key_value_dict, dc_service, shell_script):
-    shell_script.write("export DC_SERVICE='{}'\n".format(dc_service))
+    shell_script.write("export DC_SERVICE={}\n".format(dc_service))
     for key, value in key_value_dict.items():
         if isinstance(value, dict):
             for k, v in value.items():
-                shell_script.write("export {}_{}='{}'\n".format(value, k, v))
+                shell_script.write("export {}_{}={}\n".format(value, k, v))
         elif isinstance(value, list):
             for i in value:
                 equ = '' if '=' in i else '='
                 shell_script.write("export {}_{}{}\n".format(key, i, equ))
         else:
-            shell_script.write("export {}='{}'\n".format(key, value))
+            shell_script.write("export {}={}\n".format(key, value))
 
 
 def dict_merge(dct, merge_dct):
