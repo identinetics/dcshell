@@ -3,8 +3,8 @@
 main() {
     _get_commandline_opts $@
     _set_home_dirs
-    _init_sudo
     _load_yaml_config
+    _init_sudo
     image_name_tagged="${IMAGENAME}${image_tag}"  # add tag from -t
     _remove_previous_image  # i.e. image:lastest or custom tag specified with -t
     _remove_all_buildnumber_tags # filters all tags with the Bn.m pattern
@@ -43,7 +43,7 @@ _get_commandline_opts() {
         t) image_tag=":${OPTARG}";;
         v) verbose='True';;
         :) echo "Option -$OPTARG requires an argument"; exit 1;;
-        *) echo "usage: $0 [-b] [-c] [-D path][-f file...] [-h] [-k] [-l] [-m] [-M] [-p] [-r] [-t tag] [cmd]
+        *) echo "usage from shell: $0 [-b] [-c] [-D path][-f file...] [-h] [-k] [-l] [-m] [-M] [-p] [-r] [-t tag] [cmd]
              -c  do not use cache (build --no-cache)
              -D  specify project directory (file parameters will be relative to this path)
              -f  compose file (later files update keys in former ones)
@@ -83,25 +83,20 @@ _get_commandline_opts() {
 
 _set_home_dirs() {
     if [[ "$projdir" ]]; then
-        DC_PROJHOME=$projdir
+        export DC_PROJHOME=$projdir
     else
-        export DCSHELL_HOME=$(cd $(dirname $BASH_SOURCE[0]) && pwd)
         export DC_PROJHOME=$(cd $(dirname $DCSHELL_HOME) && pwd)
     fi
+    export DCSHELL_HOME=$(cd $(dirname $BASH_SOURCE[0]) && pwd)
 }
 
 
 _load_yaml_config() {
-    tmpscript=$(mktemp /var/tmp/config2shXXXX.sh)
-    cmd="$DCSHELL_HOME/config2sh.py $projdir_opt -k container_name -k image -k build.dockerfile $dc_config_opt $tmpscript"
-    [[ "$verbose" ]] && echo $cmd
-    $cmd
+    # config.py will create 'export X=Y' statemend on stdout; source it by executing the subshell
+    $($DCSHELL_HOME/config.py $projdir_opt -k container_name -k image -k build.dockerfile $dc_config_opt)
     if (( $? )); then
-        echo "config2sh.py failed"; exit 1
+        echo "config.py failed"; exit 1
     fi
-    source $tmpscript
-    [[ "$verbose" ]] && cat $tmpscript
-    #rm $tmpscript
 }
 
 

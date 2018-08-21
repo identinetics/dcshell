@@ -1,12 +1,20 @@
 #!/usr/bin/env python3
 
+'''
+Set the environment for shell scripts in dcshell:
+
+$(config.py)
+
+requires python3 in the path
+'''
+
 __author__ = 'r2h2'
 
 import argparse
 import collections
 from collections import namedtuple
 import filecmp
-import os.path
+import os
 import pytest
 import sys
 import yaml
@@ -20,7 +28,7 @@ def main(*cli_args):
         args = get_args(service_items, cli_args)
         (dc_config_dict, dc_service) = load_config_list(args.config_yaml_fd)
         key_value_list = map_service_items(dc_config_dict, dc_service, service_items, args.key)
-        create_shell_script(key_value_list, dc_service, args.shell_script_fd)
+        create_shell_script(key_value_list, dc_service, args.shellscript_fd)
     except CommandExecutionError as e:
         print(os.path.basename(__file__), 'failed.', str(e))
         sys.exit(1)
@@ -38,27 +46,31 @@ def define_service_items():
 
 def get_args(service_items, testargs=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description='Read docker-compose-yaml file and create a bash scripts that will export '
-                    'settings from a restricted list as shell variables. '
-                    'Only 1 service per file is allowed',
+        description='Read docker-compose-yaml file and write a bash scripts to stdout that will export '
+                    'settings from a given list as shell variables. '
+                    'Only 1 service per docker-compose file is allowed',
     )
-    parser.add_argument('shell_script', help='resulting shell script that can be sourced to '
-                                             'export config values to the shell')
     parser.add_argument('-D', '--projdir',
                         help='-D  specify project directory (file parameters will be relative to this path)')
     parser.add_argument('-f', '--config_yaml', action='append',
-                        help='docker-compose config file (YAML)')
+                        help='docker-compose config file (Default: docker-compose.ya?ml)')
     service_items_str = ' '.join(list(service_items.values()))
     parser.add_argument('-k', '--key', action='append',
                         help='select variable(s) (keys: {} )'.format(service_items_str))
-    #parser.add_argument('-v', '--verbose', dest='verbose', action="store_true")
+    parser.add_argument('-s', '--shellscript', help='resulting shell script that can be sourced to '
+                                             'export config values to the shell')
     if (testargs):
         args = parser.parse_args(testargs)
     else:
         args = parser.parse_args() # regular case: use sys.argv
     # open files for -f args
     if args.config_yaml is None:
-        raise CommandExecutionError('one or more -f options required')
+        for f in ('docker-compose.yaml', 'docker-compose.yml'):
+            if os.path.exists('{}/{}'.format(args.projdir, f)):
+                args.config_yam = [f]
+                break
+    if args.config_yaml is None:
+        raise CommandExecutionError('Default docker-compose.y*ml no found, and no -f option provided')
     args.config_yaml_fd = []
     for fpath_rel in args.config_yaml:
         fpath = fpath_rel if args.projdir is None else '{}/{}'.format(args.projdir, fpath_rel) # os.path.join broken
@@ -67,11 +79,15 @@ def get_args(service_items, testargs=None) -> argparse.Namespace:
         except Exception as e:
             raise CommandExecutionError('Cannot open -f', fpath)
     # open file for shell script arg
-    try:
-        fpath = args.shell_script if args.projdir is None else os.path.join(args.projdir, args.shell_script)
-        args.shell_script_fd = open(fpath, 'w', encoding='utf-8')
-    except Exception as e:
-        raise CommandExecutionError('Cannot create', fpath)
+    if args.shellscript:
+        try:
+            fpath = args.shellscript if args.projdir is None else os.path.join(args.projdir,
+                                                                               args.shellscript)
+            args.shellscript_fd = open(fpath, 'w', encoding='utf-8')
+        except Exception as e:
+            raise CommandExecutionError('Cannot create', fpath)
+    else:
+        args.shellscript_fd = sys.stdout
     return args
 
 
@@ -131,6 +147,7 @@ def create_shell_script(key_value_dict, dc_service, shell_script):
         else:
             shell_script.write("export {}='{}'\n".format(key, value))
 
+
 def dict_merge(dct, merge_dct):
     """ Recursive dict merge. Inspired by :meth:``dict.update()``, instead of
     updating only top-level keys, dict_merge recurses down into dicts nested
@@ -180,20 +197,20 @@ def test_04_load_broken_config():
             assert load_config_list([fd])
 
 def test_05_cli_default_keys():
-    main('-f', 'test/testin/config2sh/t05_dc.yaml', 'test/testout/t05_script.sh')
+    main('-f', 'test/testin/config2sh/t05_dc.yaml', '-s', 'test/testout/t05_script.sh')
     assert(filecmp.cmp('test/testin/config2sh/t05_script.sh', 'test/testout/t05_script.sh'))
 
 def test_06_cli_singlekey():
-    main('-k', 'container_name', '-f', 'test/testin/config2sh/t06_dc.yaml', 'test/testout/t06_script.sh')
+    main('-k', 'container_name', '-f', 'test/testin/config2sh/t06_dc.yaml', '-s', 'test/testout/t06_script.sh')
     assert(filecmp.cmp('test/testin/config2sh/t06_script.sh', 'test/testout/t06_script.sh'))
 
 def test_07_cli_twokeys():
-    main('-k', 'container_name', '-k', 'image', '-f', 'test/testin/config2sh/t07_dc.yaml', 'test/testout/t07_script.sh')
+    main('-k', 'container_name', '-k', 'image', '-f', 'test/testin/config2sh/t07_dc.yaml', '-s', 'test/testout/t07_script.sh')
     assert(filecmp.cmp('test/testin/config2sh/t07_script.sh', 'test/testout/t07_script.sh'))
 
 
 def test_08_path_relative_to_prjdir():
-    main('-k', 'container_name', '-D', 'test', '-f', '/testin/config2sh/t08_dc.yaml', 'testout/t08_script.sh')
+    main('-k', 'container_name', '-D', 'test', '-f', '/testin/config2sh/t08_dc.yaml', '-s', 'testout/t08_script.sh')
     assert(filecmp.cmp('test/testin/config2sh/t08_script.sh', 'test/testout/t08_script.sh'))
 
 
