@@ -165,7 +165,7 @@ def dict_merge(dct, merge_dct):
 # ---------- py.test ------------
 
 def test_01_load_config():
-    with open('test/testin/config2sh/t01_dc.yaml', encoding='utf-8') as fd:
+    with open('test/testin/config/t01_dc.yaml', encoding='utf-8') as fd:
         expected_result = (
             {'version': '2',
              'services': {'shibsp': {'image': 'local/shibsp', 'container_name': 'shibsp'}}},
@@ -175,42 +175,49 @@ def test_01_load_config():
         assert  test_result == expected_result
 
 def test_02_load_config_with_override():
-    with open('test/testin/config2sh/t02_dc.yaml', encoding='utf-8') as fd1:
+    with open('test/testin/config/t02_dc.yaml', encoding='utf-8') as fd1:
         expected_result = (
             {'version': '2',
              'services': {'shibsp': {'image': 'r2h2/shibsp:pr', 'container_name': 'shibsp'}}},
             'shibsp'
         )
-        with open('test/testin/config2sh/t02_dc-override.yaml', encoding='utf-8') as fd2:
+        with open('test/testin/config/t02_dc-override.yaml', encoding='utf-8') as fd2:
             test_result = load_config_list([fd1, fd2])
             assert  test_result == expected_result
 
-def test_03_load_config_toomanyservices():
-    with open('test/testin/config2sh/t03_dc.yaml', encoding='utf-8') as fd:
-        with pytest.raises(CommandExecutionError):
-            assert load_config_list([fd])
+def test_03_load_config_twoservices():
+    expected_result = ({
+        'version': '2',
+        'services': {'shibsp': {'image': 'local/shibsp', 'container_name': 'shibsp'},
+                     'shibsp2': {'image': 'local/shibsp2',
+                                 'container_name': 'shibsp2'}}
+         }, 'shibsp')
+    with open('test/testin/config/t03_dc.yaml', encoding='utf-8') as fd:
+        test_result = load_config_list([fd])
+        assert test_result == expected_result
+
 
 def test_04_load_broken_config():
-    with open('test/testin/config2sh/t04_dc_broken.yaml', encoding='utf-8') as fd:
+    with open('test/testin/config/t04_dc_broken.yaml', encoding='utf-8') as fd:
         with pytest.raises(CommandExecutionError):
             assert load_config_list([fd])
 
 def test_05_cli_default_keys():
-    main('-f', 'test/testin/config2sh/t05_dc.yaml', '-s', 'test/testout/t05_script.sh')
-    assert(filecmp.cmp('test/testin/config2sh/t05_script.sh', 'test/testout/t05_script.sh'))
+    main('-f', 'test/testin/config/t05_dc.yaml', '-s', 'test/testout/t05_script.sh')
+    assert(filecmp.cmp('test/testin/config/t05_script.sh', 'test/testout/t05_script.sh'))
 
 def test_06_cli_singlekey():
-    main('-k', 'container_name', '-f', 'test/testin/config2sh/t06_dc.yaml', '-s', 'test/testout/t06_script.sh')
-    assert(filecmp.cmp('test/testin/config2sh/t06_script.sh', 'test/testout/t06_script.sh'))
+    main('-k', 'container_name', '-f', 'test/testin/config/t06_dc.yaml', '-s', 'test/testout/t06_script.sh')
+    assert(filecmp.cmp('test/testin/config/t06_script.sh', 'test/testout/t06_script.sh'))
 
 def test_07_cli_twokeys():
-    main('-k', 'container_name', '-k', 'image', '-f', 'test/testin/config2sh/t07_dc.yaml', '-s', 'test/testout/t07_script.sh')
-    assert(filecmp.cmp('test/testin/config2sh/t07_script.sh', 'test/testout/t07_script.sh'))
+    main('-k', 'container_name', '-k', 'image', '-f', 'test/testin/config/t07_dc.yaml', '-s', 'test/testout/t07_script.sh')
+    assert(filecmp.cmp('test/testin/config/t07_script.sh', 'test/testout/t07_script.sh'))
 
 
 def test_08_path_relative_to_prjdir():
-    main('-k', 'container_name', '-D', 'test', '-f', '/testin/config2sh/t08_dc.yaml', '-s', 'testout/t08_script.sh')
-    assert(filecmp.cmp('test/testin/config2sh/t08_script.sh', 'test/testout/t08_script.sh'))
+    main('-k', 'container_name', '-D', 'test', '-f', '/testin/config/t08_dc.yaml', '-s', 'testout/t08_script.sh')
+    assert(filecmp.cmp('test/testin/config/t08_script.sh', 'test/testout/t08_script.sh'))
 
 
 if __name__ == "__main__":
