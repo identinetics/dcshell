@@ -48,7 +48,7 @@ def get_args(service_items, testargs=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description='Read docker-compose-yaml file and write a bash scripts to stdout that will export '
                     'settings from a given list as shell variables. '
-                    'Only 1 service per docker-compose file is allowed',
+                    'Only the first service in docker-compose file is processed',
     )
     parser.add_argument('-D', '--projdir',
                         help='-D  specify project directory (file parameters will be relative to this path)')
@@ -116,8 +116,7 @@ def load_config_list(config_yaml_list) -> list:
         dict_merge(dc_config_dict, load_config(config_yaml))
     if 'version' not in dc_config_dict:
         raise CommandExecutionError('Docker-compose config version>=2 must contain "version:"')
-    if not isinstance(dc_config_dict['services'], dict) \
-       or (len(list(dc_config_dict['services'])) != 1):
+    if not isinstance(dc_config_dict['services'], dict):
         raise CommandExecutionError('Docker-compose config: services must be a dict with exactly one service')
     dc_service = list(dc_config_dict['services'])[0]
     return (dc_config_dict, dc_service)

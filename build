@@ -3,8 +3,9 @@
 main() {
     _get_commandline_opts $@
     _set_home_dirs
+    _load_dcshell_lib
     _load_yaml_config
-    _init_sudo
+    init_sudo
     image_name_tagged="${IMAGENAME}${image_tag}"  # add tag from -t
     _remove_previous_image  # i.e. image:lastest or custom tag specified with -t
     _remove_all_buildnumber_tags # filters all tags with the Bn.m pattern
@@ -56,10 +57,11 @@ _get_commandline_opts() {
              -v  verbose
 
            The -m and -t tagging require that there is not tag on the image element in the compose file.
-
            To explicitly specify a registry set DOCKER_REGISTRY_PREFIX, which must include a trailing slash.
 
-           To generate build numbers MANIFEST_SCOPE must be set to 'local' or 'global'
+           To generate build numbers MANIFEST_SCOPE must be set to 'local' or 'global'.
+           All services defined in the compose file are build, but the manifest is generated only for the first one.
+
            "; exit 0;;
       esac
     done
@@ -90,18 +92,17 @@ _set_home_dirs() {
 }
 
 
+_load_dcshell_lib() {
+    source $DCSHELL_HOME/dcshell_lib.sh
+}
+
+
 _load_yaml_config() {
+    check_python3
     # config.py will create 'export X=Y' statemend on stdout; source it by executing the subshell
     $($DCSHELL_HOME/config.py $projdir_opt -k container_name -k image -k build.dockerfile $dc_config_opt)
     if (( $? )); then
         echo "config.py failed"; exit 1
-    fi
-}
-
-
-_init_sudo() {
-    if (( $(id -u) != 0 )); then
-        sudo='sudo -n'
     fi
 }
 
@@ -145,22 +146,12 @@ _exec_build_command() {
 }
 
 
-_check_python3() {
-    python3 -c exit >/dev/null 2>&1
-    if (( $? > 0 )); then
-        echo "python3 not found in path. Cannot generate manifest."
-        exit 5
-    fi
-}
-
-
 _generate_manifest_and_image_build_number() {
     if [[ ! "$MANIFEST_SCOPE" ]]; then
         echo "MANIFEST_SCOPE not set - no build number generated."
         return
     fi
-    _check_python3
-    _get_container_status
+    get_container_status
     is_running=$?
     if (( $is_running == 0 )); then
         echo "Container already running. Cannot generate manifest, image not tagged"
@@ -177,17 +168,6 @@ _generate_manifest_and_image_build_number() {
     python3 $DCSHELL_HOME/buildnbr.py generate $manifest_temp $MANIFEST_SCOPE $build_number_file
     build_number=$(cat $build_number_file)
     rm $build_number_file
-}
-
-
-_get_container_status() {
-    if [[ "$($sudo docker ps -f name=$CONTAINERNAME |egrep -v ^CONTAINER)" ]]; then
-        return 0   # running
-    elif [[ "$($sudo docker ps -a -f name=$CONTAINERNAME|egrep -v ^CONTAINER)" ]]; then
-        return 1   # stopped
-    else
-        return 2   # not found
-    fi
 }
 
 
