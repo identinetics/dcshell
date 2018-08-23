@@ -119,7 +119,7 @@ _remove_previous_image() {
 
 _remove_all_buildnumber_tags() {
     tmpfile=$(mktemp /tmp/build_shXXXX.tmp)
-    $sudo docker image ls --filter reference=${IMAGENAME} --format "{{.Tag}} {{.Repository}}" |\
+    $sudo docker image ls --filter reference=$IMAGENAME --format "{{.Tag}} {{.Repository}}" |\
         perl -ne 'if (/^(B\d+\.\d+)\s+(.+)$/) {print "\$sudo docker rmi $2:$1\n"}' > $tmpfile
     [[ "$verbose" ]] && cat $tmpfile
     bash $tmpfile
@@ -162,7 +162,7 @@ _generate_manifest_and_image_build_number() {
     fi
     mkdir -p $DC_PROJHOME/manifest
     manifest_temp="$DC_PROJHOME/manifest/manifest.tmp"
-    $DCSHELL_HOME/manifest.sh ${dc_opt_prefixed} > $manifest_temp
+    $DCSHELL_HOME/manifest.sh $dc_opt_prefixed > $manifest_temp
     _exec_command run --rm ${DC_SERVICE} /opt/bin/manifest2.sh | sed -e 's/\r$//' >> $manifest_temp
     build_number_file=$(mktemp)
     python3 $DCSHELL_HOME/buildnbr.py generate $manifest_temp $MANIFEST_SCOPE $build_number_file

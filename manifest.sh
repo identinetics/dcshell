@@ -3,7 +3,8 @@
 main() {
     # to be called from build, i.e. config already loaded
     _get_commandline_opts $@
-    _init_sudo
+    _load_dcshell_lib
+    init_sudo
     _inspect_changes_in_docker_build_env
     _inspect_changes_in_container
 }
@@ -30,10 +31,8 @@ _get_commandline_opts() {
 }
 
 
-_init_sudo() {
-    if (( $(id -u) != 0 )); then
-        sudo='sudo -n' # ONLY used for `docker ..` commands
-    fi
+_load_dcshell_lib() {
+    source $DCSHELL_HOME/dcshell_lib.sh
 }
 
 

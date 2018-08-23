@@ -22,7 +22,7 @@ get_container_status() {
 
 init_sudo() {
     if (( $(id -u) != 0 )); then
-        sudo='sudo -n'
+        sudo='sudo -n -E'  # preserve the env, to pass vars from jenkins to compose.yaml
     fi
 }
 

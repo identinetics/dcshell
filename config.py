@@ -14,8 +14,10 @@ import argparse
 import collections
 from collections import namedtuple
 import filecmp
+import io
 import os
 import pytest
+import subprocess
 import sys
 import yaml
 
@@ -122,9 +124,11 @@ def load_config_list(config_yaml_list) -> list:
     return (dc_config_dict, dc_service)
 
 
-def load_config(config_yaml) -> dict:
+def load_config(config_yaml: io.TextIOBase) -> dict:
     try:
-        dc_config_dict = yaml.safe_load(config_yaml)
+        cmd = 'envsubst <{}'.format(config_yaml.name)
+        pipe = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE).stdout
+        dc_config_dict = yaml.safe_load(pipe.read())
     except Exception as e:
         raise CommandExecutionError('Could not load {}: {}'.format(config_yaml.name, e))
     if not isinstance(dc_config_dict, dict):
@@ -214,10 +218,15 @@ def test_07_cli_twokeys():
     main('-k', 'container_name', '-k', 'image', '-f', 'test/testin/config/t07_dc.yaml', '-s', 'test/testout/t07_script.sh')
     assert(filecmp.cmp('test/testin/config/t07_script.sh', 'test/testout/t07_script.sh'))
 
-
 def test_08_path_relative_to_prjdir():
     main('-k', 'container_name', '-D', 'test', '-f', '/testin/config/t08_dc.yaml', '-s', 'testout/t08_script.sh')
     assert(filecmp.cmp('test/testin/config/t08_script.sh', 'test/testout/t08_script.sh'))
+
+def test_09_env_var_substitution():
+    os.environ['TEST_IMAGENAME'] = 'testowner'
+    main('-k', 'image', '-D', 'test', '-f', '/testin/config/t09_dc.yaml', '-s', 'testout/t09_script.sh')
+    assert(filecmp.cmp('test/testin/config/t09_script.sh', 'test/testout/t09_script.sh'))
+
 
 
 if __name__ == "__main__":

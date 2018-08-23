@@ -1,0 +1,5 @@
+version: "2"
+services:
+  shibsp:
+    image: $TEST_IMAGENAME/shibsp
+    container_name: shibsp
