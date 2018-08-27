@@ -186,9 +186,9 @@ _tag_image() {
     [[ "$verbose" ]] && echo $cmd
     $cmd
     if (( $? == 0 )); then
-        echo "Successfully tagged ${IMAGENAME}:B${build_number}"
+        echo "Successfully tagged ${newname}"
     else
-        echo "Failed to create tag ${IMAGENAME}:B${build_number}"
+        echo "Failed to create tag ${newname}"
         exit 4
     fi
 }
@@ -206,29 +206,33 @@ _push_image() {
     # push image if $push is set, with following tagging rules:
     #   push with tag $image_tag or without tag (i.e. :latest) if $push_latest or $image_tag are set
     #   push with build_number if $manifest is set
-    # Problem with sudo docker push (https://stackoverflow.com/questions/41984399/denied-requested-access-to-the-resource-is-denied-docker/52036051#52036051(
+    # Notes:
+    # (1) Problem with sudo docker push (https://stackoverflow.com/questions/41984399/denied-requested-access-to-the-resource-is-denied-docker/52036051#52036051(
+    # (2) code for explicit DOCKER_REGISTRY_PREFIX deactivated, pushing to default regisitry
     if [[ "$push" ]]; then
         if [[ "$image_tag" || "$push_latest" ]]; then
-            newname="${DOCKER_REGISTRY_PREFIX}${image_name_tagged}"
-            _tag_image
+            # newname="${DOCKER_REGISTRY_PREFIX}${image_name_tagged}"
+            newname="${image_name_tagged}"
+            # _tag_image
             cmd="docker push ${newname}"
             [[ "$verbose" ]] && echo $cmd
             $cmd
             (( $? > 0 )) && echo 'push failed' && exit 6
-            _untag_image
+            #_untag_image
         else
             echo "skipping docker push of :latest"
         fi
         if [[ "$manifest" ]]; then
             # push_only: need to get build_number from manifest history:
-            [[ "B${build_number}" ]] || $(basename $(ls $PROJ_HOME/manifest/$MANIFEST_SCOPE/[[:digit:]]*[[:digit:]] |tail -1))
-            newname="${DOCKER_REGISTRY_PREFIX}${IMAGENAME}:B${build_number}"
-            _tag_image
+            [[ "${build_number}" ]] || build_number=$(basename $(ls $PROJ_HOME/manifest/$MANIFEST_SCOPE/[[:digit:]]*[[:digit:]] |tail -1))
+            #newname="${DOCKER_REGISTRY_PREFIX}${IMAGENAME}:B${build_number}"
+            newname="${IMAGENAME}:B${build_number}"
+            #_tag_image
             cmd="docker push ${newname}"
             [[ "$verbose" ]] && echo $cmd
             $cmd
             (( $? > 0 )) && echo 'push failed' && exit 6
-            _untag_image
+            #_untag_image
         fi
     fi
 }
