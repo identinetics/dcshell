@@ -21,7 +21,8 @@ get_container_status() {
 
 
 init_sudo() {
-    if (( $(id -u) != 0 )); then
+    # set sudo unless there is write access to the docker socket (ignoring the TCP use case)
+    if [[ ! -w "/var/run/docker.sock" ]]; then
         sudo='sudo -n -E'  # preserve the env, to pass vars from jenkins to compose.yaml
     fi
 }

@@ -202,11 +202,12 @@ _push_image() {
     # push image if $push is set, with following tagging rules:
     #   push with tag $image_tag or without tag (i.e. :latest) if $push_latest or $image_tag are set
     #   push with build_number if $manifest is set
+    # Problem with sudo docker push (https://stackoverflow.com/questions/41984399/denied-requested-access-to-the-resource-is-denied-docker/52036051#52036051(
     if [[ "$push" ]]; then
         if [[ "$image_tag" || "$push_latest" ]]; then
             newname="${DOCKER_REGISTRY_PREFIX}${image_name_tagged}"
             _tag_image
-            cmd="${sudo} docker push ${newname}"
+            cmd="docker push ${newname}"
             [[ "$verbose" ]] && echo $cmd
             $cmd
             (( $? > 0 )) && echo 'push failed' && exit 6
@@ -217,7 +218,7 @@ _push_image() {
         if [[ "$manifest" ]]; then
             newname="${DOCKER_REGISTRY_PREFIX}${IMAGENAME}:B${build_number}"
             _tag_image
-            cmd="${sudo} docker push ${newname}"
+            cmd="docker push ${newname}"
             [[ "$verbose" ]] && echo $cmd
             $cmd
             (( $? > 0 )) && echo 'push failed' && exit 6
