@@ -110,7 +110,8 @@ def get_last_version(manifest_lib) -> str:
     for file in os.listdir(path):
         if os.path.isfile(os.path.join(path, file)) and not file.startswith('.'):
             manifest_dirlist_local.append(file)
-    manifest_dirlist = sorted(manifest_dirlist_global + manifest_dirlist_local)
+    manifest_dirlist = sorted(manifest_dirlist_global + manifest_dirlist_local,
+                              key = lambda x: list(map(int, x.split('.'))))  # numeric sort on both parts of the string!
     if len(manifest_dirlist) > 0:
         _ = manifest_dirlist[-1:]
         last_manifest_name = _[0]

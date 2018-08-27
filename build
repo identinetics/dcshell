@@ -223,8 +223,7 @@ _push_image() {
             echo "skipping docker push of :latest"
         fi
         if [[ "$manifest" ]]; then
-            # push_only: need to get build_number from manifest history:
-            [[ "${build_number}" ]] || build_number=$(basename $(ls $PROJ_HOME/manifest/$MANIFEST_SCOPE/[[:digit:]]*[[:digit:]] |tail -1))
+            build_number=$(python3 $DCSHELL_HOME/buildnbr.py read)
             #newname="${DOCKER_REGISTRY_PREFIX}${IMAGENAME}:B${build_number}"
             newname="${IMAGENAME}:B${build_number}"
             #_tag_image
