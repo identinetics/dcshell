@@ -230,7 +230,11 @@ _push_image() {
             cmd="docker push ${newname}"
             [[ "$verbose" ]] && echo $cmd
             $cmd
-            (( $? > 0 )) && echo 'push failed' && exit 6
+            if (( $? > 0 )); then
+                echo 'push failed'
+                exit 6
+            fi
+            echo 'push successful'
             #_untag_image
         fi
     fi
