@@ -31,7 +31,7 @@ _get_commandline_opts() {
     f_index=0
     while getopts ":cD:hf:klmMpPrt:v" opt; do
       case $opt in
-        c) CACHEOPT="--no-cache";;
+        c) cacheopt="--no-cache";;
         D) projdir=$OPTARG; projdir_opt="-D $OPTARG";;
         f) dc_config_list[$f_index]=$OPTARG;
            dc_config_opt="${dc_config_opt} -f ${OPTARG}";
@@ -140,7 +140,7 @@ _exec_command() {
 
 
 _exec_build_command() {
-    _exec_command build
+    _exec_command build $cacheopt
     if (( $rc == 0 )); then
         echo "image: ${image_name_tagged} built."
     else
