@@ -29,7 +29,7 @@ _get_commandline_opts() {
     unset image_tag
     push_latest='True'
     f_index=0
-    while getopts ":cD:hf:klmMpPrt:v" opt; do
+    while getopts ":cD:hf:klmMpPrR:t:v" opt; do
       case $opt in
         c) cacheopt="--no-cache";;
         D) projdir=$OPTARG; projdir_opt="-D $OPTARG";;
@@ -43,6 +43,7 @@ _get_commandline_opts() {
         p) push='True';;
         P) push=true; push_only='True';;
         r) remove_img='True';;
+        R) docker_registry_user=$OPTARG;;
         t) image_tag=":${OPTARG}";;
         v) verbose='True';;
         :) echo "Option -$OPTARG requires an argument"; exit 1;;
@@ -57,6 +58,7 @@ _get_commandline_opts() {
              -p  push after build (pushing :latest depends on -l)
              -p  push without build (useful for a build-test-pus flow)
              -r  remove existing image (all tags: docker rmi -f imageid)
+             -R  registry user used for push
              -t  add this custom tag to the build target name
              -v  verbose
 
@@ -208,7 +210,7 @@ _push_image() {
     #   push with build_number if $manifest is set
     # Notes:
     # (1) Problem with sudo docker push (https://stackoverflow.com/questions/41984399/denied-requested-access-to-the-resource-is-denied-docker/52036051#52036051(
-    # (2) code for explicit DOCKER_REGISTRY_PREFIX deactivated, pushing to default regisitry
+    # (2) code for explicit DOCKER_REGISTRY_PREFIX deactivated, pushing to default registry
     if [[ "$push" ]]; then
         if [[ "$image_tag" || "$push_latest" ]]; then
             # newname="${DOCKER_REGISTRY_PREFIX}${image_name_tagged}"
