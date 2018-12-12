@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -e
 
 # Replace docker registry owner 'local' by $DOCKER_REGISTRY_USER
 
