@@ -227,6 +227,10 @@ def test_09_env_var_substitution():
     main('-k', 'image', '-D', 'test', '-f', '/testin/config/t09_dc.yaml', '-s', 'testout/t09_script.sh')
     assert(filecmp.cmp('test/testin/config/t09_script.sh', 'test/testout/t09_script.sh'))
 
+def test_10_with_nested_keys():
+    main('-f', 'test/testin/config/t10_dc.yaml', '-s', 'test/testout/t10_script.sh')
+    assert(filecmp.cmp('test/testin/config/t10_script.sh', 'test/testout/t10_script.sh'))
+
 
 
 if __name__ == "__main__":
