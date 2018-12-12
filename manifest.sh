@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/bash -e
 
 main() {
     # to be called from build, i.e. config already loaded
