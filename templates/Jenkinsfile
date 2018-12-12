@@ -41,7 +41,7 @@ pipeline {
                     [[ "$nocache" ]] && nocacheopt='-c' && echo 'build with option nocache'
                     export MANIFEST_SCOPE='local'
                     export PROJ_HOME='.'
-                    ./dcshell/build -f dc.yaml $nocacheopt
+                    ./dcshell/build -f docker-compose.yaml $nocacheopt
                     echo "=== build completed with rc $?"
                 '''
             }

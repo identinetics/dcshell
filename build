@@ -73,20 +73,32 @@ _get_commandline_opts() {
     done
     shift $((OPTIND-1))
     # post-process -f argument(s)
-    if (( $f_index==0 )); then
-         echo "at least one -f argument is required"; exit 1
-    fi
     dc_opt_prefixed=''
-    for f in ${dc_config_list[@]}; do
-        [[ "$projdir" ]] && f="${projdir}/${f}"
-        if [[ ! -f "$f" ]]; then
-            echo -f $f must be a file; exit 1
+    if (( $f_index==0 )); then
+        _get_default_config
+        if [[ dc_config_base ]]; then
+            dc_opt_prefixed="-f ${dc_config_base}"
         else
-            dc_opt_prefixed="$dc_opt_prefixed -f ${f}"
+            echo "you need to specify the config file (-f <compose-file>)"; exit 1
         fi
-    done
-    dc_config_base=${dc_config_list[0]}
+    else
+        for f in ${dc_config_list[@]}; do
+            [[ "$projdir" ]] && f="${projdir}/${f}"
+            if [[ ! -f "$f" ]]; then
+                echo -f $f must be a file; exit 1
+            else
+                dc_opt_prefixed="$dc_opt_prefixed -f ${f}"
+            fi
+            dc_config_base=${dc_config_list[0]}
+        done
+    fi
 }
+
+
+_get_default_config(){
+    dc_config_base=$(ls docker-compose.y*ml)
+}
+
 
 _set_home_dirs() {
     export DCSHELL_HOME=$(cd $(dirname $BASH_SOURCE[0]) && pwd)
@@ -105,8 +117,8 @@ _load_dcshell_lib() {
 
 _load_yaml_config() {
     check_python3
-    # config.py will create 'export X=Y' statemend on stdout; source it by executing the subshell
-    $($DCSHELL_HOME/config.py $projdir_opt -k container_name -k image -k build.dockerfile $dc_config_opt)
+    # config.py will create 'export X=Y' statements on stdout; source it by executing the subshell
+    $($DCSHELL_HOME/config.py $projdir_opt -k container_name -k image -k build.dockerfile $dc_opt_prefixed)
     if (( $? )); then
         echo "config.py failed"; exit 1
     fi
