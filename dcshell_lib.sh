@@ -29,3 +29,17 @@ init_sudo() {
 }
 
 
+load_compose_yaml_config() {
+    set -e
+    check_python3
+    # config.py will create 'export X=Y' statements on stdout; source it by executing the subshell
+    tmpfile="/tmp/dcshell-build${$}"
+    $($DCSHELL_HOME/config.py $projdir_opt \
+        -k container_name -k image -k build.context -k build.dockerfile $dc_opt_prefixed) \
+        > $tmpfile
+    source $tmpfile
+    set +e
+    rm -f $$tmpfile
+}
+
+

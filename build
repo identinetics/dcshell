@@ -5,7 +5,7 @@ main() {
     _get_commandline_opts $@
     _set_home_dirs
     _load_dcshell_lib
-    _load_yaml_config
+    load_compose_yaml_config
     init_sudo
     image_name_tagged="${IMAGENAME}${image_tag}"  # add tag from -t
     if [[ ! "$push_only" ]]; then
@@ -113,20 +113,6 @@ _set_home_dirs() {
 
 _load_dcshell_lib() {
     source $DCSHELL_HOME/dcshell_lib.sh
-}
-
-
-_load_yaml_config() {
-    set -e
-    check_python3
-    # config.py will create 'export X=Y' statements on stdout; source it by executing the subshell
-    tmpfile="/tmp/dcshell-build${$}"
-    $($DCSHELL_HOME/config.py $projdir_opt \
-        -k container_name -k image -k build.context -k build.dockerfile $dc_opt_prefixed) \
-        > $tmpfile
-    source $tmpfile
-    set +e
-    rm -f $$tmpfile
 }
 
 
