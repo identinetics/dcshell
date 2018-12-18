@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+PS4='+(${BASH_SOURCE}:${LINENO}): ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 
 check_python3() {
     python3 -c exit >/dev/null 2>&1

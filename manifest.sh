@@ -1,4 +1,5 @@
 #!/bin/bash -e
+PS4='+(${BASH_SOURCE}:${LINENO}): ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 
 main() {
     # to be called from build, i.e. config already loaded
