@@ -57,7 +57,8 @@ _inspect_git_repos() {
 
 
 _inspect_from_image() {
-    dockerfile_path="${DC_PROJHOME}/${DC_DOCKERFILE:-Dockerfile}"
+    [[ $CONTEXT ]] && context_path="$CONTEXT/"
+    dockerfile_path="${DC_PROJHOME}/${context_path}${DC_DOCKERFILE:-Dockerfile}"
     from_image_spec=$(egrep "^FROM" ${dockerfile_path} | awk '{ print $2}')
     if [[ "$from_image_spec" == *:* ]]; then
         image_id=$(${sudo} docker image ls --filter "reference=${from_image_spec}" -q | head -1)
