@@ -118,11 +118,12 @@ _load_dcshell_lib() {
 _load_yaml_config() {
     check_python3
     # config.py will create 'export X=Y' statements on stdout; source it by executing the subshell
-    source $($DCSHELL_HOME/config.py $projdir_opt \
-        -k container_name -k image -k build.context -k build.dockerfile $dc_opt_prefixed)
-    if (( $? )); then
-        echo "config.py failed"; exit 1
-    fi
+    tmpfile="/tmp/${0}${$}"
+    $($DCSHELL_HOME/config.py $projdir_opt \
+        -k container_name -k image -k build.context -k build.dockerfile $dc_opt_prefixed) \
+        > $tmpfile
+    source $tmpfile
+    rm -f $$tmpfile
 }
 
 
