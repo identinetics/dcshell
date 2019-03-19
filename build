@@ -186,7 +186,10 @@ _generate_manifest_and_image_build_number() {
     mkdir -p $DC_PROJHOME/manifest
     manifest_temp="$DC_PROJHOME/manifest/manifest.tmp"
     $DCSHELL_HOME/manifest.sh $dc_opt_prefixed > $manifest_temp
-    _exec_command run --rm ${DC_SERVICE} /opt/bin/manifest2.sh | sed -e 's/\r$//' >> $manifest_temp
+        label='jobid=pvzdweb_manifest2'
+    $sudo docker rm -f $($sudo docker container ls --filter "label=${label}" --quiet) | true
+    _exec_command run --rm --label "${label}" ${DC_SERVICE} /opt/bin/manifest2.sh | \
+        sed -e 's/\r$//' >> $manifest_temp
     build_number_file=$(mktemp)
     python3 $DCSHELL_HOME/buildnbr.py generate $manifest_temp $MANIFEST_SCOPE $build_number_file
     build_number=$(cat $build_number_file)
