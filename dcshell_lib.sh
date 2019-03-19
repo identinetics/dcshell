@@ -11,7 +11,10 @@ check_python3() {
 
 
 get_container_status() {
-    if [[ "$($sudo docker ps -f name=$CONTAINERNAME |egrep -v ^CONTAINER)" ]]; then
+    if [[ ! "$CONTAINERNAME" ]]; then
+        echo 'CONTAINERNAME must not be empty'
+        exit 1
+    elif [[ "$($sudo docker ps -f name=$CONTAINERNAME |egrep -v ^CONTAINER)" ]]; then
         return 0   # running
     elif [[ "$($sudo docker ps -a -f name=$CONTAINERNAME|egrep -v ^CONTAINER)" ]]; then
         return 1   # stopped

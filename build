@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash
 PS4='+(${BASH_SOURCE}:${LINENO}): ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 
 main() {
@@ -172,8 +172,9 @@ _generate_manifest_and_image_build_number() {
     mkdir -p $DC_PROJHOME/manifest
     manifest_temp="$DC_PROJHOME/manifest/manifest.tmp"
     $DCSHELL_HOME/manifest.sh $dc_opt_prefixed > $manifest_temp
-        label='jobid=pvzdweb_manifest2'
-    $sudo docker rm -f $($sudo docker container ls --filter "label=${label}" --quiet) | true
+    label="${DC_SERVICE}.dcshell.build.manifest2"
+    $sudo docker rm -f $($sudo docker container ls --filter "label=${label}" --quiet) \
+        >/dev/null 2>&1 | true
     _exec_command run --rm --label "${label}" ${DC_SERVICE} /opt/bin/manifest2.sh | \
         sed -e 's/\r$//' >> $manifest_temp
     build_number_file=$(mktemp)
