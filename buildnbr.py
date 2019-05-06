@@ -9,6 +9,7 @@ import os
 import re
 import shutil
 import sys
+from decimal import *
 
 ''' From the comparison between new and previous manifests compute a new build number 
     in case there was a change.
@@ -63,19 +64,19 @@ def get_args(testargs=None):
 
 
 def make_a_difference(manifest_temp, manifest_lib) -> list:
-    manifest_dirlist_global = []
-    path = os.path.join(manifest_lib, 'global')
-    os.makedirs(path, exist_ok=True)
-    for file in os.listdir(path):
-        if os.path.isfile(os.path.join(path, file)):
-            manifest_dirlist_global.append(file)
-    manifest_dirlist_local = []
-    path = os.path.join(manifest_lib, 'local')
-    os.makedirs(path, exist_ok=True)
-    for file in os.listdir(path):
-        if os.path.isfile(os.path.join(path, file)) and not file.startswith('.'):
-            manifest_dirlist_local.append(file)
-    manifest_dirlist = sorted(manifest_dirlist_global + manifest_dirlist_local)
+    def get_dirlist(scope: str) -> list:
+        path = os.path.join(manifest_lib, scope)
+        os.makedirs(path, exist_ok=True)
+        l = []
+        for file in os.listdir(path):
+            if os.path.isfile(os.path.join(path, file)) and not file.startswith('.'):
+                l.append(file)
+        return l
+
+    manifest_dirlist_global = get_dirlist('global')
+    manifest_dirlist_local = get_dirlist('local')
+    manifest_dirlist = sorted(manifest_dirlist_global + manifest_dirlist_local,
+                              key=lambda x: Decimal(x))  # numeric sort!
     if len(manifest_dirlist) > 0:
         _ = manifest_dirlist[-1:]
         last_manifest_name = _[0]
@@ -111,7 +112,7 @@ def get_last_version(manifest_lib) -> str:
         if os.path.isfile(os.path.join(path, file)) and not file.startswith('.'):
             manifest_dirlist_local.append(file)
     manifest_dirlist = sorted(manifest_dirlist_global + manifest_dirlist_local,
-                              key = lambda x: list(map(int, x.split('.'))))  # numeric sort on both parts of the string!
+                              key = lambda x: Decimal(x))  # numeric sort!
     if len(manifest_dirlist) > 0:
         _ = manifest_dirlist[-1:]
         last_manifest_name = _[0]
