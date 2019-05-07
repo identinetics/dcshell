@@ -9,6 +9,10 @@ Pimp docker-compose
 dcscripts includes the plumbing to increment the build number whenever source or dependencies change.
 See link:docs/Buildnumbers.adoc
 
+Build numbers: When a new image is generated, by default all images with older builld number tags are removed.
+The buildnumber (:Bn.m) and :lastest tags are created both locally and push to the registry.
+This behavior can be modified with command line options.
+
 == Install, Usage
 
 By default, the dcshell directory is an immediate subfolder of your project dir.
@@ -17,3 +21,9 @@ Copy the project into the docker build context, such as:
     git submodule add <this project URL>
 
 You may override this with the -D/--projdir option.
+
+== Default Repositories
+
+dcshell's build command uses the default registry.
+The `docker push` command uses the first default registry if no explicit registry is specified.
+A recommended docker configuration is to have the local registry in the first position and docker.io (or the default redhat registry) second to allow pulls to work as usual.
