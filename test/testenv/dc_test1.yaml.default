@@ -2,12 +2,15 @@ version: "2"
 services:
   alpinista:
     build:
-        context: .
-        args:
-            - TIMEZONE=Europe/Vienna
+      context: .
+      dockerfile: test/testenv/Dockerfile
+      args:
+        - TIMEZONE=Europe/Vienna
     image: local/test_alpinista
     container_name: test_alpinista
     hostname: test_alpinista
+    cap_drop:
+      - ALL
 
 networks:
   jenkins:

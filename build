@@ -3,36 +3,50 @@ PS4='+(${BASH_SOURCE}:${LINENO}): ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
 [[ "$BASH_TRACE" ]] && set -xv
 
 
+# From the image name from the compose file (in IMAGENAME) following variants are derived
+
+# - local_image_name_latest  = IMAGENAME
+# - local_image_name_buildnr  = IMAGENAME:Bn.m
+# - remote_image_name_latest  = local_image_name_latest if (DOCKER_REGISTRY_HOST is empty) else DOCKER_REGISTRY_HOST/local_image_name_latest
+# - remote_image_name_buildnr  = local_image_name_buildnr if (DOCKER_REGISTRY_HOST is empty) else DOCKER_REGISTRY_HOST/local_image_name_buildnr
+
+# local names are used for build, remote names for push
+
 main() {
-    _get_commandline_opts $@
+    _get_commandline_opts "$@"
     _set_home_dirs
     _load_dcshell_lib
     load_compose_yaml_config
     init_sudo
-    image_name_tagged="${IMAGENAME}${image_tag}"  # add tag from -t
-    if [[ ! "$push_only" ]]; then
-        _remove_previous_image  # i.e. image:lastest or custom tag specified with -t
-        _remove_all_buildnumber_tags # filters all tags with the Bn.m pattern
-        _exec_build_command
-        if [[ "$manifest" ]]; then
-            if [[ "$MANIFEST_SCOPE" ]]; then
-                _generate_manifest_and_image_build_number
-                _tag_with_build_number
-            else
-                echo "MANIFEST_SCOPE not set - no build number generated."
-            fi
+    _validate_manifest_options
+    local_image_name_latest=$IMAGENAME
+    if [[ "$build" ]]; then
+        _remove_previous_image  # i.e. image:latest or custom tag specified with -t
+        [[ "$keep_opt" ]] || _remove_all_buildnumber_tags # filters all tags with the Bn.m pattern
+        _build_image
+        if [[ "$manifest" && "$MANIFEST_SCOPE" ]]; then
+            local buildnr=$(_generate_image_build_number)
+            _set_image_names_buildnr "$buildnr"
+            _tag_image "$local_image_name_buildnr"
+        else
+            echo "No build number requested or no MANIFEST_SCOPE set."
         fi
     fi
-    _push_image
+    if [[ "$push" ]]; then
+        _tag_remote_image_names
+        _push_images
+        _untag_remote_images
+    fi
 }
 
 
 _get_commandline_opts() {
+    build='True'
     manifest='True'
-    unset image_tag
+    unset custom_tag_suffix
     push_latest='True'
     f_index=0
-    while getopts ":cD:hf:klmMpPrR:t:v" opt; do
+    while getopts ":cD:hf:klmMpPrv" opt; do
       case $opt in
         c) cacheopt="--no-cache";;
         D) projdir=$OPTARG; projdir_opt="-D $OPTARG";;
@@ -44,56 +58,133 @@ _get_commandline_opts() {
         m) manifest='True';;
         M) unset manifest;;
         p) push='True';;
-        P) push=true; push_only='True';;
+        P) push='True'; unset build;;
         r) remove_img='True';;
-        R) docker_registry_user=$OPTARG;;
-        t) image_tag=":${OPTARG}";;
         v) verbose='True';;
         :) echo "Option -$OPTARG requires an argument"; exit 1;;
-        *) echo "usage from shell: $0 [-b] [-c] [-D path][-f file...] [-h] [-k] [-l] [-m] [-M] [-p] [-r] [-t tag] [cmd]
-             -c  do not use cache (build --no-cache)
-             -D  specify project directory (file parameters will be relative to this path)
-             -f  compose file (later files update keys in former ones)
-             -k  keep previous build tags (default: remove all 'B*' tags)
-             -l  do not push image:latest (only :<buildno> or tag from -t)
-             -m  generate manifest for build number generation (default)
-             -M  do not generate manifest for build number generation
-             -p  push after build (pushing :latest depends on -l)
-             -p  push without build (useful for a build-test-pus flow)
-             -r  remove existing image (all tags: docker rmi -f imageid)
-             -R  registry user used for push
-             -t  add this custom tag to the build target name
-             -v  verbose
-
-           The -m and -t tagging require that there is not tag on the image element in the compose file.
-           To explicitly specify a registry set DOCKER_REGISTRY_PREFIX, which must include a trailing slash.
-
-           To generate build numbers MANIFEST_SCOPE must be set to 'local' or 'global'.
-           All services defined in the compose file are build, but the manifest is generated only for the first one.
-
-           "; exit 0;;
+        *) _usage; exit 0;;
       esac
     done
     shift $((OPTIND-1))
+
     # post-process -f argument(s)
     dc_opt_prefixed=''
-    if (( $f_index==0 )); then
+    if (( f_index==0 )); then
         _get_default_config
-        if [[ dc_config_base ]]; then
+        if [[ "$dc_config_base" ]]; then
             dc_opt_prefixed="-f ${dc_config_base}"
         else
             echo "you need to specify the config file (-f <compose-file>)"; exit 1
         fi
     else
-        for f in ${dc_config_list[@]}; do
+        for f in "${dc_config_list[@]}"; do
             [[ "$projdir" ]] && f="${projdir}/${f}"
             if [[ ! -f "$f" ]]; then
-                echo -f $f must be a file; exit 1
+                echo "-f ${f} must be a file"; exit 1
             else
                 dc_opt_prefixed="$dc_opt_prefixed -f ${f}"
             fi
             dc_config_base=${dc_config_list[0]}
         done
+    fi
+}
+
+_usage() {
+    echo "usage from shell: $0 [-b] [-c] [-D path] [-f file]... [-h] [-k] [-l] [-m] [-M] [-p] [-r] [-t tag] [cmd]
+         -c  do not use cache (build --no-cache)
+         -D  specify project directory (file parameters will be relative to this path)
+         -f  compose file (can be specified multiple times; later files update keys in former ones)
+         -k  keep previous build tags (default: remove all '<buildnr>' tags)
+         -l  do not push image:latest (push :<buildno> and tag from -t if -t is given)
+         -m  generate manifest for build number generation (default)
+         -M  do not generate manifest for build number generation
+         -p  push after build (pushing :latest depends on -l)
+         -p  push without build (useful for a build-test-push flow)
+         -r  remove existing image (all tags: docker rmi -f imageid)
+         -v  verbose
+
+       The -m and -t tagging require that there is not tag on the image element in the compose file.
+
+       Tagging rules:
+       1. Key 'image' in the compose file must not be tagged (-> use different compose files for build and run).
+          Therefor build always creates image:latest
+       2. Unless -M is specified, the image is tagged with <buildnr> in addition to 'latest'
+       3. Tag image with 'latest' (unless -l is given) or custom tag from -t option
+       4. By default, both 'latest' and <buildnr> tags are pushed.
+
+       The registry user (local == remote) is taken from the compose file and cannot be changed here.
+
+       To generate build numbers MANIFEST_SCOPE must be set to 'local' or 'global'.
+       All services defined in the compose file are build, but the manifest is generated only for the first one.
+
+       To push to a specific container registry the environment variable DOCKER_REGISTRY_HOST must be set.
+       DOCKER_REGISTRY_HOST has the format <hostname>[:port]
+       Otherwise the push refers to the default registry (docker.io, or first entry in /etc/containers/registries.conf -> rpm containers-common with rh-docker)
+
+       "
+}
+
+
+_build_image() {
+    _exec_docker_compose build $cacheopt
+    rc=$?
+    if (( rc == 0 )); then
+        echo "image: ${local_image_name_latest} built."
+    else
+        echo -e '\E[33;31m'"\033[1mError\033[0m Docker build failed"
+        exit $rc
+    fi
+}
+
+
+_exec_cmd() {
+    local cmd="${sudo} $*"
+    [[ "$verbose" ]] && echo "$cmd"
+    $cmd
+    rc=$?
+    if (( rc > 0 )); then
+        echo "${cmd} failed with code ${rc}"
+    fi
+    return $rc
+}
+
+
+_exec_docker_compose() {
+    local cmd="${sudo} docker-compose ${dc_opt_prefixed} $*"
+    [[ "$verbose" ]] && echo "$cmd"
+    $cmd
+    return $?
+}
+
+
+_generate_image_build_number() {
+    get_container_status
+    mkdir -p "$DC_PROJHOME/manifest"
+    manifest_temp="$DC_PROJHOME/manifest/manifest.tmp"
+    "$DCSHELL_HOME/manifest.sh" $dc_opt_prefixed > $manifest_temp
+    label="${DC_SERVICE}.dcshell.build.manifest2"
+    $sudo docker rm -f $($sudo docker container ls --filter "label=${label}" --quiet) \
+        >/dev/null 2>&1 | true
+    _exec_docker_compose run --rm --label "${label}" ${DC_SERVICE} /opt/bin/manifest2.sh | \
+        sed -e 's/\r$//' >> $manifest_temp
+    build_number_file=$(mktemp)
+    python3 $DCSHELL_HOME/buildnbr.py generate $manifest_temp $MANIFEST_SCOPE $build_number_file
+    build_number=$(cat $build_number_file)
+    rm $build_number_file
+    echo $build_number
+}
+
+
+_get_container_status() {
+    if [[ ! "$CONTAINERNAME" ]]; then
+        echo 'CONTAINERNAME must not be empty'
+        exit 1
+    elif [[ "$($sudo docker ps -f name=$CONTAINERNAME |egrep -v ^CONTAINER)" ]]; then
+        return 0   # running
+    elif [[ "$($sudo docker ps -a -f name=$CONTAINERNAME|egrep -v ^CONTAINER)" ]]; then
+        return 1   # stopped
+    else
+        return 2   # not found
     fi
 }
 
@@ -103,153 +194,115 @@ _get_default_config(){
 }
 
 
-_set_home_dirs() {
-    export DCSHELL_HOME=$(cd $(dirname $BASH_SOURCE[0]) && pwd)
-    if [[ "$projdir" ]]; then
-        export DC_PROJHOME=$projdir
-    else
-        export DC_PROJHOME=$(cd $(dirname $DCSHELL_HOME) && pwd)
-    fi
-}
-
-
 _load_dcshell_lib() {
-    source $DCSHELL_HOME/dcshell_lib.sh
+    echo $projdir_opt > /dev/null  # tell lint that this var is required
+    source "$DCSHELL_HOME/dcshell_lib.sh"
 }
 
 
-_remove_previous_image() {
-    if [[ "$remove_img" ]]; then
-        image_id=$(${sudo} docker images ls --filter "reference=${image_name_tagged}" -q)
-        cmd="${sudo} docker rmi -f ${image_id}"
-        [[ "$verbose" ]] && echo $cmd
-        $cmd 2> /dev/null || true
+_push_images() {
+    if [[ "$push_latest" ]]; then
+        _exec_cmd "docker push ${remote_image_name_latest}" || exit 5
+    else
+        echo "skipping docker push of :latest"
+    fi
+
+    if [[ "$manifest" ]]; then
+        _exec_cmd "docker push ${remote_image_name_buildnr}" || exit 5
+    else
+        echo "skipping docker push of :latest"
     fi
 }
 
 
 _remove_all_buildnumber_tags() {
-    tmpfile=$(mktemp /tmp/build_shXXXX.tmp)
+    local tmpfile=$(mktemp /tmp/build_shXXXX.tmp)
     $sudo docker image ls --filter reference=$IMAGENAME --format "{{.Tag}} {{.Repository}}" |\
-        perl -ne 'if (/^(B\d+\.\d+)\s+(.+)$/) {print "\$sudo docker rmi $2:$1\n"}' > $tmpfile
-    [[ "$verbose" ]] && cat $tmpfile
-    bash $tmpfile
-    rm $tmpfile
+        perl -ne 'if (/^(B\d+\.\d+)\s+(.+)$/) {print "\$sudo docker rmi $2:$1\n"}' > "$tmpfile"
+    [[ "$verbose" ]] && cat "$tmpfile"
+    bash "$tmpfile"
+    rm "$tmpfile"
 }
 
 
-_exec_command() {
-    cmd="${sudo} docker-compose ${dc_opt_prefixed} $@"
-    [[ "$verbose" ]] && echo $cmd
-    $cmd
-    rc=$?
+_remove_previous_image() {
+    if [[ "$remove_img" ]]; then
+        local image_id=$(${sudo} docker images ls --filter "reference=${local_image_name_latest}" -q)
+        local cmd="${sudo} docker rmi -f ${image_id}"
+        [[ "$verbose" ]] && echo "$cmd"
+        $cmd 2> /dev/null || true
+    fi
 }
 
 
-_exec_build_command() {
-    _exec_command build $cacheopt
-    if (( $rc == 0 )); then
-        echo "image: ${image_name_tagged} built."
+_set_home_dirs() {
+    export DCSHELL_HOME=$(cd $(dirname "$BASH_SOURCE"[0]) && pwd)
+    if [[ "$projdir" ]]; then
+        export DC_PROJHOME=$projdir
     else
-        echo -e '\E[33;31m'"\033[1mError\033[0m Docker build failed"
-        exit $rc
+        export DC_PROJHOME=$(cd $(dirname "$DCSHELL_HOME") && pwd)
     fi
 }
 
 
-_generate_manifest_and_image_build_number() {
-    if [[ ! "$MANIFEST_SCOPE" ]]; then
-        echo "MANIFEST_SCOPE not set - no build number generated."
-        return
+_set_image_names_buildnr() {
+    local buildnr=$1
+    local_image_name_buildnr="${IMAGENAME}${buildnr}"
+    if [[ "$DOCKER_REGISTRY_HOST" ]]; then
+        remote_image_name_buildnr="${DOCKER_REGISTRY_HOST}/${IMAGENAME}${buildnr}"
+    else
+        remote_image_name_buildnr=$local_image_name_buildnr
     fi
-    get_container_status
-    is_running=$?
-    if (( $is_running == 0 )); then
-        echo "Container already running. Cannot generate manifest, image not tagged"
-        exit 2
-    elif [[ ! -e "$DCSHELL_HOME/manifest.sh"  ]]; then
-        echo "cannot run $DCSHELL_HOME/manifest.sh; image not tagged"
-        exit 3
-    fi
-    mkdir -p $DC_PROJHOME/manifest
-    manifest_temp="$DC_PROJHOME/manifest/manifest.tmp"
-    $DCSHELL_HOME/manifest.sh $dc_opt_prefixed > $manifest_temp
-    label="${DC_SERVICE}.dcshell.build.manifest2"
-    $sudo docker rm -f $($sudo docker container ls --filter "label=${label}" --quiet) \
-        >/dev/null 2>&1 | true
-    _exec_command run --rm --label "${label}" ${DC_SERVICE} /opt/bin/manifest2.sh | \
-        sed -e 's/\r$//' >> $manifest_temp
-    build_number_file=$(mktemp)
-    python3 $DCSHELL_HOME/buildnbr.py generate $manifest_temp $MANIFEST_SCOPE $build_number_file
-    build_number=$(cat $build_number_file)
-    rm $build_number_file
 }
 
+_set_image_names_latest() {
 
-_tag_with_build_number() {
-    newname="${IMAGENAME}:B${build_number}"
-    _tag_image
+    if [[ "$DOCKER_REGISTRY_HOST" ]]; then
+        remote_image_name_latest="${DOCKER_REGISTRY_HOST}/${local_image_name_latest}"
+    else
+        remote_image_name_latest=$local_image_name_latest
+    fi
 }
 
 
 _tag_image() {
-    cmd="${sudo} docker tag ${IMAGENAME} ${newname}"
+    local new_image_name=$1
+    cmd="${sudo} docker tag $IMAGENAME ${new_image_name}"
     [[ "$verbose" ]] && echo $cmd
-    $cmd
-    if (( $? == 0 )); then
-        echo "Successfully tagged ${newname}"
+    if $cmd; then
+        echo "Successfully tagged ${new_image_name}"
     else
-        echo "Failed to create tag ${newname}"
+        echo "Failed to create tag ${new_image_name}"
         exit 4
     fi
 }
 
 
-_untag_image() {
-    cmd="${sudo} docker rmi ${newname}"
-    [[ "$verbose" ]] && echo $cmd
-    $cmd
-    (( $? > 0 )) && echo 'untag failed' && exit 5
+_untag_remote_images() {
+    if [[ "$remote_image_name_latest" != "$local_image_name_latest" ]]; then
+        _exec_cmd docker image rm $remote_image_name_latest || exit 6
+    fi
+    if [[ "$remote_image_name_buildnr" != "$local_image_name_buildnr" ]]; then
+        _exec_cmd docker image rm $remote_image_name_buildnr || exit 6
+    fi
 }
 
 
-_push_image() {
-    # push image if $push is set, with following tagging rules:
-    #   push with tag $image_tag or without tag (i.e. :latest) if $push_latest or $image_tag are set
-    #   push with build_number if $manifest is set
-    # Notes:
-    # (1) Problem with sudo docker push (https://stackoverflow.com/questions/41984399/denied-requested-access-to-the-resource-is-denied-docker/52036051#52036051(
-    # (2) code for explicit DOCKER_REGISTRY_PREFIX deactivated, pushing to default registry
-    if [[ "$push" ]]; then
-        if [[ "$image_tag" || "$push_latest" ]]; then
-            # newname="${DOCKER_REGISTRY_PREFIX}${image_name_tagged}"
-            newname="${image_name_tagged}"
-            # _tag_image
-            cmd="docker push ${newname}"
-            [[ "$verbose" ]] && echo $cmd
-            $cmd
-            (( $? > 0 )) && echo 'push failed' && exit 6
-            #_untag_image
-        else
-            echo "skipping docker push of :latest"
+_validate_manifest_options() {
+    if [[ "$manifest" ]]; then
+        if [[ ! "$MANIFEST_SCOPE" ]]; then
+            echo 'Build number generation requested but MANIFEST_SCOPE not set'
+            exit 1
         fi
-        if [[ "$manifest" ]]; then
-            build_number=$(python3 $DCSHELL_HOME/buildnbr.py read)
-            #newname="${DOCKER_REGISTRY_PREFIX}${IMAGENAME}:B${build_number}"
-            newname="${IMAGENAME}:B${build_number}"
-            #_tag_image
-            cmd="docker push ${newname}"
-            [[ "$verbose" ]] && echo $cmd
-            $cmd
-            if (( $? > 0 )); then
-                echo 'push failed'
-                exit 6
-            fi
-            echo 'push successful'
-            #_untag_image
+        if _get_container_status; then
+            echo "Build number generation requested but container is already running. (Cannot generate manifest)"
+            exit 1
+        elif [[ ! -e "$DCSHELL_HOME/manifest.sh"  ]]; then
+            echo "cannot run $DCSHELL_HOME/manifest.sh; image not tagged"
+            exit 1
         fi
     fi
 }
 
 
-main $@
+main "$@"
